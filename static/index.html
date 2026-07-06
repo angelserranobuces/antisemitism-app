@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Spanish Newspaper Antisemitism Risk Analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #22263a;
+  --border: #2e3347;
+  --accent: #4f8ef7;
+  --accent2: #7c5cbf;
+  --text: #e8eaf6;
+  --text2: #8892b0;
+  --success: #4caf50;
+  --warning: #ff9800;
+  --danger: #f44336;
+  --risk0: #b2dfdb; --risk1: #a5d6a7; --risk2: #fff9c4;
+  --risk3: #ffe0b2; --risk4: #ffcdd2; --risk5: #b71c1c;
+  --radius: 12px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+/* Layout */
+.app-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 32px; display: flex; align-items: center; gap: 16px; }
+.logo { width: 40px; height: 40px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.header-title h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+.header-title p { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.app-main { max-width: 1400px; margin: 0 auto; padding: 32px 24px; }
+
+/* Cards */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
+.card-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.card-title .icon { font-size: 18px; }
+
+/* Upload Area */
+#upload-zone {
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  padding: 48px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(79,142,247,0.04);
+}
+#upload-zone:hover, #upload-zone.drag-over { background: rgba(79,142,247,0.1); border-color: #7db5ff; }
+#upload-zone .upload-icon { font-size: 48px; margin-bottom: 12px; }
+#upload-zone h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+#upload-zone p { color: var(--text2); font-size: 14px; }
+#file-input { display: none; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; text-decoration: none; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #3d7de0; transform: translateY(-1px); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { background: #388e3c; }
+.btn-sm { padding: 6px 14px; font-size: 13px; }
+.btn-outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.btn-outline:hover { background: rgba(79,142,247,0.1); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* File list */
+#file-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.file-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.file-item .file-icon { font-size: 20px; }
+.file-item .file-info { flex: 1; }
+.file-item .file-name { font-size: 14px; font-weight: 600; }
+.file-item .file-meta { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 700; }
+.badge-ok { background: rgba(76,175,80,0.2); color: #81c784; }
+.badge-error { background: rgba(244,67,54,0.2); color: #e57373; }
+.badge-warn { background: rgba(255,152,0,0.2); color: #ffb74d; }
+
+/* Progress */
+#progress-section { display: none; }
+.progress-bar-wrap { background: var(--surface2); border-radius: 100px; height: 8px; overflow: hidden; margin-top: 8px; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 100px; transition: width 0.3s; }
+.progress-status { font-size: 13px; color: var(--text2); margin-top: 8px; }
+
+/* Results */
+#results-section { display: none; margin-top: 32px; }
+.section-title { font-size: 22px; font-weight: 800; margin-bottom: 20px; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+/* Summary Cards */
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 32px; }
+.summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; position: relative; overflow: hidden; }
+.summary-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.summary-card.risk-0::before { background: #b2dfdb; }
+.summary-card.risk-1::before { background: #a5d6a7; }
+.summary-card.risk-2::before { background: #fff9c4; }
+.summary-card.risk-3::before { background: #ffe0b2; }
+.summary-card.risk-4::before { background: #ffcdd2; }
+.summary-card.risk-5::before { background: #b71c1c; }
+.summary-card .newspaper-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.summary-card .card-date { font-size: 12px; color: var(--text2); margin-bottom: 16px; }
+.rating-display { display: flex; align-items: baseline; gap: 6px; }
+.rating-big { font-size: 42px; font-weight: 900; line-height: 1; }
+.rating-max { font-size: 18px; color: var(--text2); }
+.risk-badge { margin-top: 12px; }
+
+/* Score matrix table */
+.table-wrap { overflow-x: auto; margin-bottom: 32px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: var(--surface2); color: var(--text2); font-weight: 700; padding: 10px 14px; text-align: left; border-bottom: 2px solid var(--border); white-space: nowrap; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,0.02); }
+.score-cell { font-weight: 700; text-align: center; border-radius: 6px; }
+
+/* Ranking */
+.rank-table td:first-child { font-size: 20px; font-weight: 900; color: var(--text2); width: 48px; }
+.rank-1 td:first-child { color: #ffd700; }
+.rank-2 td:first-child { color: #c0c0c0; }
+.rank-3 td:first-child { color: #cd7f32; }
+
+/* Evidence */
+.evidence-list { display: flex; flex-direction: column; gap: 12px; }
+.evidence-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.evidence-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.evidence-newspaper { font-weight: 700; font-size: 14px; }
+.evidence-trigger { font-style: italic; color: var(--text2); font-size: 13px; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 4px; flex: 1; }
+.evidence-reason { font-size: 13px; color: var(--text2); line-height: 1.5; }
+.impact-high { color: #f44336; }
+.impact-medium { color: #ff9800; }
+.impact-low { color: #4caf50; }
+
+/* Downloads */
+.download-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.download-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.download-item h4 { font-size: 13px; font-weight: 700; }
+.download-item p { font-size: 12px; color: var(--text2); }
+.download-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+/* Chart */
+#history-section { margin-top: 40px; }
+.chart-wrap { position: relative; height: 350px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--surface2); padding: 4px; border-radius: 10px; width: fit-content; }
+.tab { padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text2); transition: all 0.2s; }
+.tab.active { background: var(--accent); color: #fff; }
+
+/* Errors */
+#errors-section { margin-top: 20px; }
+.error-card { background: rgba(244,67,54,0.08); border: 1px solid rgba(244,67,54,0.3); border-radius: 8px; padding: 16px; }
+.error-card h4 { color: #f44336; margin-bottom: 6px; }
+
+/* Tooltip */
+[data-tooltip] { position: relative; cursor: help; }
+[data-tooltip]::after { content: attr(data-tooltip); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #1a1d27; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 11px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 99; }
+[data-tooltip]:hover::after { opacity: 1; }
+
+/* Spinner */
+.spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-main { padding: 16px; }
+  #upload-zone { padding: 24px; }
+  .summary-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Server connectivity banner -->
+<div id="server-banner" style="display:none; background:#b71c1c; color:#fff; padding:12px 32px; font-size:14px; display:flex; align-items:center; gap:12px">
+  <span style="font-size:20px">⚠️</span>
+  <span><strong>Server not reachable.</strong> You may have opened this HTML file directly. Start the server first: <code style="background:rgba(0,0,0,0.3); padding:2px 8px; border-radius:4px">python run.py</code> then open <code style="background:rgba(0,0,0,0.3); padding:2px 8px; border-radius:4px">http://localhost:8000</code></span>
+</div>
+
+<header class="app-header">
+  <div class="logo">📊</div>
+  <div class="header-title">
+    <h1>Newspaper Antisemitism Risk Analyzer</h1>
+    <p>IHRA-informed framing risk assessment · Spanish press editions</p>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <!-- Upload -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-title"><span class="icon">📁</span> Upload Newspaper Files</div>
+    <div id="upload-zone" onclick="document.getElementById('file-input').click()">
+      <div class="upload-icon">📄</div>
+      <h3>Drag & drop newspaper files here</h3>
+      <p style="margin-bottom:16px">or click to browse · Format: <code>DD-MM-YY-Newspaper.pdf</code> or <code>.txt</code></p>
+      <p style="font-size:12px; color:var(--text2)">Supported: El Mundo · La Razón · El País · ABC</p>
+    </div>
+    <input type="file" id="file-input" multiple accept=".pdf,.txt"/>
+    <div id="file-list"></div>
+    <div style="margin-top:20px; display:flex; gap:12px; align-items:center" id="action-row">
+      <button class="btn btn-primary" id="analyze-btn" onclick="analyzeFiles()" disabled>
+        <span>Analyze Newspapers</span>
+      </button>
+      <button class="btn btn-outline btn-sm" onclick="clearFiles()">Clear</button>
+      <span id="file-count-label" style="font-size:13px; color:var(--text2)"></span>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div id="progress-section" class="card" style="margin-bottom:24px">
+    <div class="card-title"><span class="icon">⚙️</span> Processing</div>
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+    <div class="progress-status" id="progress-status">Preparing analysis…</div>
+  </div>
+
+  <!-- Errors -->
+  <div id="errors-section" style="display:none; margin-bottom:24px"></div>
+
+  <!-- Results -->
+  <div id="results-section">
+    <div class="section-title" id="results-title">Analysis Results</div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('summary')">Summary</div>
+      <div class="tab" onclick="switchTab('matrix')">Score Matrix</div>
+      <div class="tab" onclick="switchTab('ranking')">Ranking</div>
+      <div class="tab" onclick="switchTab('evidence')">Evidence</div>
+      <div class="tab" onclick="switchTab('downloads')">Downloads</div>
+    </div>
+
+    <!-- Summary Tab -->
+    <div id="tab-summary">
+      <div class="summary-grid" id="summary-cards"></div>
+    </div>
+
+    <!-- Matrix Tab -->
+    <div id="tab-matrix" style="display:none">
+      <div class="card">
+        <div class="card-title"><span class="icon">📋</span> Category Score Matrix</div>
+        <div class="table-wrap"><table id="matrix-table"></table></div>
+      </div>
+    </div>
+
+    <!-- Ranking Tab -->
+    <div id="tab-ranking" style="display:none">
+      <div class="card">
+        <div class="card-title"><span class="icon">🏆</span> Risk Ranking (Highest → Lowest)</div>
+        <div class="table-wrap"><table id="ranking-table"></table></div>
+      </div>
+    </div>
+
+    <!-- Evidence Tab -->
+    <div id="tab-evidence" style="display:none">
+      <div class="card">
+        <div class="card-title"><span class="icon">🔍</span> Evidence & Trigger Analysis</div>
+        <div class="evidence-list" id="evidence-list"></div>
+      </div>
+    </div>
+
+    <!-- Downloads Tab -->
+    <div id="tab-downloads" style="display:none">
+      <div class="card">
+        <div class="card-title"><span class="icon">⬇️</span> Download Reports</div>
+        <div class="download-grid" id="download-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Word Report Downloads -->
+  <div id="docx-download-section" class="card" style="margin-top:32px">
+    <div class="card-title"><span class="icon">📄</span> Download Word Reports by Date</div>
+    <p style="font-size:13px; color:var(--text2); margin-bottom:16px">
+      Select a date to generate the two comparison reports for that day's analyzed newspapers.
+    </p>
+    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap">
+      <div style="display:flex; flex-direction:column; gap:6px">
+        <label for="docx-date-picker" style="font-size:12px; color:var(--text2); font-weight:600; text-transform:uppercase; letter-spacing:.05em">Analysis Date</label>
+        <select id="docx-date-picker" style="background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px 12px; font-size:14px; cursor:pointer; min-width:180px">
+          <option value="">— select a date —</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:18px">
+        <button class="btn btn-primary" onclick="downloadEvidencePhrasesDocx()" id="btn-evidence-phrases" disabled>
+          📄 Evidence Phrases &amp; Formula
+        </button>
+        <button class="btn btn-primary" onclick="downloadComprehensiveRiskDocx()" id="btn-comprehensive" disabled>
+          📄 Comprehensive Risk Report
+        </button>
+      </div>
+    </div>
+    <p id="docx-download-status" style="font-size:12px; color:var(--text2); margin-top:10px"></p>
+  </div>
+
+  <!-- Historical Chart -->
+  <div id="history-section" class="card" style="margin-top:40px">
+    <div class="card-title"><span class="icon">📈</span> Historical Trend — Overall Risk Rating</div>
+    <div class="chart-wrap"><canvas id="history-chart"></canvas></div>
+    <p style="font-size:12px; color:var(--text2); margin-top:12px; text-align:center">
+      Trend lines show all analyzed editions stored in the database. Updated automatically after each analysis.
+    </p>
+  </div>
+
+</main>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let selectedFiles = [];
+let lastResults = [];
+let historyChart = null;
+
+const NEWSPAPER_COLORS = {
+  'El País':   { border: '#4f8ef7', bg: 'rgba(79,142,247,0.15)' },
+  'El Mundo':  { border: '#ff9800', bg: 'rgba(255,152,0,0.15)' },
+  'La Razón':  { border: '#4caf50', bg: 'rgba(76,175,80,0.15)' },
+  'ABC':       { border: '#e91e63', bg: 'rgba(233,30,99,0.15)' },
+};
+
+const CATEGORIES = [
+  { key: 'collective_blame',                label: 'Collective Blame',                    weight: '20%' },
+  { key: 'conspiracy_tropes',               label: 'Conspiracy Tropes',                   weight: '20%' },
+  { key: 'holocaust_inversion',             label: 'Holocaust Inversion',                 weight: '15%' },
+  { key: 'demonisation',                    label: 'Demonisation',                        weight: '10%' },
+  { key: 'denial_jewish_self_determination',label: 'Denial of Self-Determination',        weight: '10%' },
+  { key: 'double_standards',                label: 'Double Standards',                    weight: '10%' },
+  { key: 'dehumanisation',                  label: 'Dehumanisation',                      weight: '5%'  },
+  { key: 'asymmetric_empathy',              label: 'Asymmetric Empathy',                  weight: '5%'  },
+  { key: 'contextual_omission',             label: 'Contextual Omission',                 weight: '5%'  },
+];
+
+// ── File Handling ─────────────────────────────────────────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  handleFiles([...e.dataTransfer.files]);
+});
+document.getElementById('file-input').addEventListener('change', e => handleFiles([...e.target.files]));
+
+function handleFiles(files) {
+  files.forEach(f => {
+    if (!selectedFiles.find(x => x.name === f.name)) selectedFiles.push(f);
+  });
+  renderFileList();
+}
+
+function renderFileList() {
+  const list = document.getElementById('file-list');
+  if (selectedFiles.length === 0) { list.innerHTML = ''; updateAnalyzeBtn(); return; }
+  list.innerHTML = selectedFiles.map((f, i) => {
+    const info = validateFilename(f.name);
+    return `<div class="file-item">
+      <span class="file-icon">📄</span>
+      <div class="file-info">
+        <div class="file-name">${f.name}</div>
+        <div class="file-meta">${(f.size/1024/1024).toFixed(1)} MB ${info.valid ? `· ${info.newspaper} · ${info.date}` : ''}</div>
+      </div>
+      <span class="badge ${info.valid ? 'badge-ok' : 'badge-error'}">${info.valid ? '✓ Valid' : '✗ ' + info.error}</span>
+      <button class="btn btn-sm" onclick="removeFile(${i})" style="padding:4px 8px; background:var(--surface2); color:var(--text2)">✕</button>
+    </div>`;
+  }).join('');
+  document.getElementById('file-count-label').textContent = `${selectedFiles.length} file(s) selected`;
+  updateAnalyzeBtn();
+}
+
+function validateFilename(name) {
+  const match = name.match(/^(\d{2})-(\d{2})-(\d{2})-(.+)\.(pdf|txt)$/i);
+  if (!match) return { valid: false, error: 'Invalid filename format' };
+  const newspaper = match[4].trim();
+  const known = ['el mundo', 'el país', 'el pais', 'la razón', 'la razon', 'la-razon', 'abc'];
+  if (!known.some(k => newspaper.toLowerCase().replace(/_/g,' ') === k || newspaper.toLowerCase().includes(k)))
+    return { valid: false, error: 'Unknown newspaper' };
+  const y = 2000 + parseInt(match[3]);
+  const date = `${y}-${match[2]}-${match[1]}`;
+  return { valid: true, newspaper, date };
+}
+
+function removeFile(i) { selectedFiles.splice(i, 1); renderFileList(); }
+function clearFiles() { selectedFiles = []; document.getElementById('file-input').value = ''; renderFileList(); }
+function updateAnalyzeBtn() {
+  const btn = document.getElementById('analyze-btn');
+  const valid = selectedFiles.filter(f => validateFilename(f.name).valid);
+  btn.disabled = valid.length === 0;
+}
+
+// ── Analysis — background job with polling ────────────────────────────────────
+async function analyzeFiles() {
+  const validFiles = selectedFiles.filter(f => validateFilename(f.name).valid);
+  if (validFiles.length === 0) return;
+
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div><span>Analyzing…</span>';
+
+  document.getElementById('progress-section').style.display = 'block';
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('errors-section').style.display = 'none';
+  setProgress(2, `Uploading ${validFiles.length} PDF(s)…`);
+
+  try {
+    // Step 1: Upload files and get job ID (returns immediately)
+    const formData = new FormData();
+    validFiles.forEach(f => formData.append('files', f));
+    const uploadResp = await fetch('/api/analyze', { method: 'POST', body: formData });
+    if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
+    const { job_id, errors: uploadErrors } = await uploadResp.json();
+
+    if (!job_id) {
+      throw new Error('No valid files were accepted by the server.');
+    }
+
+    // Step 2: Poll job status every 3 seconds
+    setProgress(5, 'Analysis started — this may take several minutes for scanned PDFs…');
+    const data = await pollJob(job_id);
+
+    // Step 3: Show results
+    lastResults = data.results;
+    renderResults(data);
+    setProgress(100, 'Complete!');
+    setTimeout(() => { document.getElementById('progress-section').style.display = 'none'; }, 2000);
+    loadHistory();
+    populateDocxDatePicker();
+
+  } catch(e) {
+    setProgress(0, '');
+    document.getElementById('progress-section').style.display = 'none';
+    const isNetworkError = ['Load failed','Failed to fetch','NetworkError'].some(s => e.message.includes(s)) || e.name === 'TypeError';
+    if (isNetworkError) {
+      showError('Cannot reach the server. Make sure you started it with <code>python run.py</code> and are accessing <strong>http://localhost:8000</strong>.');
+      document.getElementById('server-banner').style.display = 'flex';
+    } else {
+      showError('Analysis failed: ' + e.message);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span>Analyze Newspapers</span>';
+  }
+}
+
+async function pollJob(jobId) {
+  // Poll every 3 seconds until the job is done — no timeout
+  while (true) {
+    await new Promise(r => setTimeout(r, 3000));
+    const resp = await fetch(`/api/job/${jobId}`);
+    if (!resp.ok) throw new Error(`Job poll failed: ${resp.status}`);
+    const job = await resp.json();
+
+    // Update progress bar with server-reported progress
+    setProgress(job.progress, job.message || 'Processing…');
+
+    // Show partial results as they come in
+    if (job.done_count > 0 && job.status !== 'done') {
+      document.getElementById('progress-status').textContent =
+        `${job.message} (${job.done_count}/${job.total} complete)`;
+    }
+
+    if (job.status === 'done') {
+      return job;
+    }
+  }
+}
+
+function setProgress(pct, msg) {
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-status').textContent = msg;
+}
+
+// ── Render Results ─────────────────────────────────────────────────────────────
+function renderResults(data) {
+  const { results, errors } = data;
+  document.getElementById('results-section').style.display = 'block';
+
+  const dates = [...new Set(results.map(r => r.date))];
+  document.getElementById('results-title').textContent =
+    `Analysis Results · ${dates.join(', ')}`;
+
+  renderSummaryCards(results);
+  renderMatrix(results);
+  renderRanking(results);
+  renderEvidence(results);
+  renderDownloads(results);
+
+  if (errors && errors.length) {
+    const section = document.getElementById('errors-section');
+    section.style.display = 'block';
+    section.innerHTML = `<div class="error-card"><h4>⚠️ ${errors.length} file(s) failed</h4>${errors.map(e =>
+      `<p style="font-size:13px; margin-top:4px"><strong>${e.filename || e.newspaper}</strong>: ${e.error}</p>`).join('')}</div>`;
+  }
+  switchTab('summary');
+}
+
+function scoreColor(s) {
+  if (s === 'Not Determined' || s === null || s === undefined) return '#555';
+  const n = parseFloat(s);
+  if (n === 0) return '#4caf50';
+  if (n < 1)   return '#8bc34a';
+  if (n < 2)   return '#cddc39';
+  if (n < 3)   return '#ff9800';
+  if (n < 4)   return '#f44336';
+  return '#b71c1c';
+}
+
+function riskClass(overall) {
+  if (overall < 0.3) return 'risk-0';
+  if (overall < 0.8) return 'risk-1';
+  if (overall < 1.3) return 'risk-2';
+  if (overall < 1.9) return 'risk-3';
+  if (overall < 2.8) return 'risk-4';
+  return 'risk-5';
+}
+
+function riskLabel(overall) {
+  if (overall < 0.3) return 'No Risk';
+  if (overall < 0.8) return 'Very Low';
+  if (overall < 1.3) return 'Low';
+  if (overall < 1.9) return 'Low-Moderate';
+  if (overall < 2.8) return 'Moderate';
+  if (overall < 3.8) return 'High';
+  return 'Very High';
+}
+
+function riskBadgeColor(label) {
+  const m = { 'No Risk':'#4caf50','Very Low':'#8bc34a','Low':'#cddc39','Low-Moderate':'#ff9800','Moderate':'#ff5722','High':'#f44336','Very High':'#b71c1c' };
+  return m[label] || '#666';
+}
+
+function renderSummaryCards(results) {
+  const sorted = [...results].sort((a,b) => b.overall_rating - a.overall_rating);
+  document.getElementById('summary-cards').innerHTML = sorted.map(r => {
+    const rl = r.risk_level || riskLabel(r.overall_rating);
+    const rc = riskClass(r.overall_rating);
+    const color = riskBadgeColor(rl);
+    return `<div class="summary-card ${rc}">
+      <div class="newspaper-name">${r.newspaper}</div>
+      <div class="card-date">📅 ${r.date} · ${r.filename || ''}</div>
+      <div class="rating-display">
+        <span class="rating-big" style="color:${scoreColor(r.overall_rating)}">${r.overall_rating.toFixed(1)}</span>
+        <span class="rating-max">/ 5</span>
+      </div>
+      <div class="risk-badge" style="margin-top:10px">
+        <span class="badge" style="background:${color}22; color:${color}; font-size:12px; padding:4px 12px">${rl}</span>
+      </div>
+      ${r.confidence_overall ? `<div style="font-size:12px; color:var(--text2); margin-top:8px">Confidence: ${r.confidence_overall}</div>` : ''}
+      ${r.main_drivers ? `<div style="font-size:12px; color:var(--text2); margin-top:8px; line-height:1.5">${r.main_drivers.substring(0,120)}${r.main_drivers.length>120?'…':''}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderMatrix(results) {
+  const sorted = [...results].sort((a,b) => b.overall_rating - a.overall_rating);
+  const newspapers = sorted.map(r => r.newspaper);
+  let html = `<thead><tr><th>Category</th><th>Weight</th>${newspapers.map(n=>`<th>${n}</th>`).join('')}</tr></thead><tbody>`;
+  CATEGORIES.forEach(cat => {
+    html += `<tr><td>${cat.label}</td><td style="color:var(--text2)">${cat.weight}</td>`;
+    sorted.forEach(r => {
+      const s = r.category_scores?.[cat.key];
+      const score = s?.score !== undefined ? s.score : (s || 0);
+      const nd = score === 'Not Determined';
+      const color = scoreColor(score);
+      const conf = s?.confidence || '';
+      html += `<td class="score-cell" style="color:${color}" data-tooltip="${conf ? 'Confidence: '+conf : ''}">${nd ? 'N/D' : score}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += `<tr style="font-weight:800"><td colspan="2">Overall Rating</td>`;
+  sorted.forEach(r => {
+    const color = scoreColor(r.overall_rating);
+    html += `<td class="score-cell" style="color:${color}; font-size:16px">${r.overall_rating.toFixed(2)}</td>`;
+  });
+  html += `</tr></tbody>`;
+  document.getElementById('matrix-table').innerHTML = html;
+}
+
+function renderRanking(results) {
+  const sorted = [...results].sort((a,b) => b.overall_rating - a.overall_rating);
+  const medals = ['🥇','🥈','🥉','4️⃣'];
+  let html = `<thead><tr><th>Rank</th><th>Newspaper</th><th>Overall Rating</th><th>Risk Level</th><th>Main Drivers</th></tr></thead><tbody>`;
+  sorted.forEach((r, i) => {
+    const rl = r.risk_level || riskLabel(r.overall_rating);
+    const color = riskBadgeColor(rl);
+    html += `<tr class="rank-${i+1}">
+      <td>${medals[i] || i+1}</td>
+      <td style="font-weight:700">${r.newspaper}</td>
+      <td style="font-weight:800; color:${scoreColor(r.overall_rating)}; font-size:18px">${r.overall_rating.toFixed(2)}</td>
+      <td><span class="badge" style="background:${color}22; color:${color}">${rl}</span></td>
+      <td style="font-size:13px; color:var(--text2)">${r.main_drivers || '—'}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('ranking-table').innerHTML = html;
+}
+
+function renderEvidence(results) {
+  const all = [];
+  results.forEach(r => {
+    (r.evidence_items || []).forEach(e => all.push({ ...e, newspaper: r.newspaper }));
+  });
+  if (all.length === 0) {
+    document.getElementById('evidence-list').innerHTML = '<p style="color:var(--text2); text-align:center; padding:32px">No specific evidence triggers detected.</p>';
+    return;
+  }
+  const impactOrder = { 'High': 0, 'Medium': 1, 'Low': 2 };
+  all.sort((a,b) => (impactOrder[a.impact]||3) - (impactOrder[b.impact]||3));
+  document.getElementById('evidence-list').innerHTML = all.map(e => {
+    const ic = `impact-${(e.impact||'').toLowerCase()}`;
+    const catLabel = CATEGORIES.find(c => c.key === e.category)?.label || e.category;
+    return `<div class="evidence-item">
+      <div class="evidence-header">
+        <span class="evidence-newspaper">${e.newspaper}</span>
+        <span class="badge badge-warn">${catLabel}</span>
+        <span class="${ic} badge" style="font-size:11px">${e.impact || ''} impact</span>
+        ${e.page_reference && e.page_reference !== 'N/A' ? `<span style="font-size:12px; color:var(--text2)">p. ${e.page_reference}</span>` : ''}
+      </div>
+      ${e.article_title ? `<div style="font-size:13px; font-weight:600; margin-bottom:6px">📰 ${e.article_title}</div>` : ''}
+      ${e.trigger_phrase ? `<div class="evidence-trigger">"${e.trigger_phrase}"</div>` : ''}
+      <div class="evidence-reason" style="margin-top:8px">${e.reason || ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderDownloads(results) {
+  const date = results[0]?.date || '';
+  const grid = document.getElementById('download-grid');
+
+  const items = [
+    {
+      title: 'Daily Excel Dataset',
+      desc: 'All newspapers, all category scores',
+      btns: [{ label: '📊 XLSX', fn: () => downloadDailyExcel(results, date) }]
+    },
+    {
+      title: 'Risk Ranking',
+      desc: 'Ranked by overall framing risk',
+      btns: [
+        { label: '📊 XLSX', fn: () => downloadRankingExcel(results) },
+        { label: '📝 CSV',  fn: () => downloadRankingCsv(results) },
+      ]
+    },
+    {
+      title: 'Evidence Table',
+      desc: 'All triggers, pages, articles',
+      btns: [
+        { label: '📊 XLSX', fn: () => downloadEvidenceExcel(results) },
+        { label: '📝 CSV',  fn: () => downloadEvidenceCsv(results) },
+        { label: '{ } JSON', fn: () => downloadEvidenceJson(results) },
+      ]
+    },
+  ];
+
+  // Per-newspaper JSON
+  results.forEach(r => {
+    items.push({
+      title: `${r.newspaper} JSON`,
+      desc: `Structured analysis · ${r.date}`,
+      btns: [{ label: '{ } JSON', fn: () => downloadNewspaperJson(r) }]
+    });
+  });
+
+  grid.innerHTML = items.map((item, i) => `
+    <div class="download-item">
+      <h4>${item.title}</h4>
+      <p>${item.desc}</p>
+      <div class="download-btns">${item.btns.map((b, j) =>
+        `<button class="btn btn-outline btn-sm" onclick="downloadActions[${i}][${j}]()">${b.label}</button>`
+      ).join('')}</div>
+    </div>
+  `).join('');
+
+  // Register actions globally
+  window.downloadActions = items.map(item => item.btns.map(b => b.fn));
+}
+
+// ── Download Helpers ──────────────────────────────────────────────────────────
+async function postAndDownload(url, payload, filename) {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) { alert('Download failed: ' + resp.status); return; }
+  const blob = await resp.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+function downloadDailyExcel(results, date) {
+  postAndDownload('/api/export/daily-excel', { results, date }, `Daily_Antisemitism_Risk_Dataset_${date}.xlsx`);
+}
+function downloadRankingExcel(results) {
+  postAndDownload('/api/export/ranking-excel', { results }, 'Spanish_Newspapers_Antisemitic_Framing_Risk_Ranking.xlsx');
+}
+function downloadRankingCsv(results) {
+  postAndDownload('/api/export/ranking-csv', { results }, 'Spanish_Newspapers_Antisemitic_Framing_Risk_Ranking.csv');
+}
+function downloadEvidenceExcel(results) {
+  postAndDownload('/api/export/evidence-excel', { results }, 'Expanded_Evidence_Table_With_Pages_and_Articles.xlsx');
+}
+function downloadEvidenceCsv(results) {
+  postAndDownload('/api/export/evidence-csv', { results }, 'Expanded_Evidence_Table_With_Pages_and_Articles.csv');
+}
+function downloadEvidenceJson(results) {
+  postAndDownload('/api/export/evidence-json', { results }, 'Expanded_Evidence_Table_With_Pages_and_Articles.json');
+}
+function downloadNewspaperJson(r) {
+  const safe = r.newspaper.replace(/[^a-zA-Z0-9]/g,'_');
+  postAndDownload(`/api/export/json/${safe}`, r, `${safe}_${r.date}.json`);
+}
+
+// ── DOCX Downloads by date ────────────────────────────────────────────────────
+async function populateDocxDatePicker() {
+  try {
+    const resp = await fetch('/api/history');
+    const { data } = await resp.json();
+    const dates = [...new Set(data.map(d => d.date))].sort().reverse();
+    const sel = document.getElementById('docx-date-picker');
+    dates.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = d;
+      sel.appendChild(opt);
+    });
+    // Also pre-select if lastResults has a date
+    if (lastResults.length && lastResults[0].date) {
+      sel.value = lastResults[0].date;
+      toggleDocxBtns();
+    }
+  } catch(e) { /* no history yet */ }
+}
+
+function toggleDocxBtns() {
+  const date = document.getElementById('docx-date-picker').value;
+  const enabled = !!date;
+  document.getElementById('btn-evidence-phrases').disabled = !enabled;
+  document.getElementById('btn-comprehensive').disabled = !enabled;
+}
+
+document.getElementById('docx-date-picker').addEventListener('change', toggleDocxBtns);
+
+async function getAndDownload(url, filename) {
+  const status = document.getElementById('docx-download-status');
+  status.textContent = 'Generating document…';
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    status.textContent = `✓ Downloaded ${filename}`;
+    setTimeout(() => { status.textContent = ''; }, 4000);
+  } catch(e) {
+    status.textContent = '❌ ' + e.message;
+  }
+}
+
+function downloadEvidencePhrasesDocx() {
+  const date = document.getElementById('docx-date-picker').value;
+  if (!date) return;
+  getAndDownload(
+    `/api/export/evidence-phrases-docx?date=${date}`,
+    `Evidence_Phrases_and_FRS_Formula_Report_${date}.docx`
+  );
+}
+
+function downloadComprehensiveRiskDocx() {
+  const date = document.getElementById('docx-date-picker').value;
+  if (!date) return;
+  getAndDownload(
+    `/api/export/comprehensive-risk-docx?date=${date}`,
+    `Comprehensive_Antisemitic_Framing_Risk_Report_${date}.docx`
+  );
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('[id^=tab-]').forEach(t => t.style.display = 'none');
+  document.getElementById(`tab-${name}`).style.display = 'block';
+  document.querySelectorAll('.tab').forEach(t => {
+    if (t.getAttribute('onclick').includes(`'${name}'`)) t.classList.add('active');
+  });
+}
+
+// ── Historical Chart ───────────────────────────────────────────────────────────
+async function loadHistory() {
+  try {
+    const resp = await fetch('/api/history');
+    const data = await resp.json();
+    renderHistoryChart(data.data);
+  } catch(e) {
+    console.error('History load failed:', e);
+  }
+}
+
+function renderHistoryChart(data) {
+  const newspapers = ['El País', 'El Mundo', 'La Razón', 'ABC'];
+  const allDates = [...new Set(data.map(d => d.date))].sort();
+
+  const datasets = newspapers.map(np => {
+    const color = NEWSPAPER_COLORS[np] || { border: '#999', bg: 'rgba(153,153,153,0.15)' };
+    const points = allDates.map(d => {
+      const found = data.find(r => r.newspaper === np && r.date === d);
+      return found ? found.overall_rating : null;
+    });
+    return {
+      label: np,
+      data: points,
+      borderColor: color.border,
+      backgroundColor: color.bg,
+      borderWidth: 2.5,
+      pointRadius: 5,
+      pointHoverRadius: 8,
+      tension: 0.3,
+      spanGaps: true,
+    };
+  });
+
+  const ctx = document.getElementById('history-chart').getContext('2d');
+  if (historyChart) historyChart.destroy();
+  historyChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: allDates, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: { color: '#e8eaf6', font: { size: 13 }, padding: 20 }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2) ?? 'N/A'} / 5`
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#8892b0' },
+          grid: { color: '#2e3347' },
+        },
+        y: {
+          min: 0, max: 5,
+          ticks: { color: '#8892b0', stepSize: 1 },
+          grid: { color: '#2e3347' },
+          title: { display: true, text: 'Risk Score (0–5)', color: '#8892b0' }
+        }
+      }
+    }
+  });
+}
+
+// ── Errors ────────────────────────────────────────────────────────────────────
+function showError(msg) {
+  const section = document.getElementById('errors-section');
+  section.style.display = 'block';
+  section.innerHTML = `<div class="error-card"><h4>❌ Error</h4><p style="font-size:13px; margin-top:4px">${msg}</p></div>`;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function checkServerHealth() {
+  try {
+    const resp = await fetch('/api/health', { signal: AbortSignal.timeout(4000) });
+    if (resp.ok) {
+      document.getElementById('server-banner').style.display = 'none';
+      return true;
+    }
+  } catch(e) {
+    document.getElementById('server-banner').style.display = 'flex';
+    document.getElementById('analyze-btn').disabled = true;
+    document.getElementById('analyze-btn').title = 'Server not running';
+  }
+  return false;
+}
+
+async function init() {
+  const healthy = await checkServerHealth();
+  if (healthy) {
+    loadHistory();
+    populateDocxDatePicker();
+  }
+}
+init();
+</script>
+</body>
+</html>
