@@ -1,8 +1,9 @@
 """
-PDF text extraction pipeline with three fallback methods:
-  1. PyMuPDF direct text  — fastest, works on searchable PDFs
-  2. pdfplumber           — alternative text extractor
-  3. pytesseract OCR      — for scanned/image PDFs (requires tesseract)
+PDF text extraction pipeline — no PyMuPDF dependency:
+  1. pdfplumber   — best for searchable PDFs
+  2. PyPDF2       — fallback text extractor
+  3. pdf2image + pytesseract OCR — for scanned/image PDFs
+     (requires: tesseract-ocr + poppler-utils system packages)
 """
 
 import io
@@ -22,7 +23,7 @@ RELEVANCE_KEYWORDS = [
     "ataque", "ofensiva", "expansionis", "idf", "tsahal",
 ]
 
-MIN_TEXT_CHARS = 300   # below this → try next method
+MIN_TEXT_CHARS = 300
 
 
 def _is_relevant(text: str) -> bool:
@@ -30,21 +31,7 @@ def _is_relevant(text: str) -> bool:
     return any(kw in lower for kw in RELEVANCE_KEYWORDS)
 
 
-# ── Method 1: PyMuPDF direct text extraction ──────────────────────────────────
-
-def _extract_fitz(file_bytes: bytes) -> List[Dict]:
-    """Use PyMuPDF (fitz) text extraction — handles more PDF variants than pdfplumber."""
-    import fitz  # pip3 install pymupdf
-    doc = fitz.open(stream=file_bytes, filetype="pdf")
-    pages = []
-    for i, page in enumerate(doc):
-        text = page.get_text("text")  # plain text mode
-        pages.append({"page_num": i + 1, "text": text, "is_relevant": _is_relevant(text)})
-    doc.close()
-    return pages
-
-
-# ── Method 2: pdfplumber ──────────────────────────────────────────────────────
+# ── Method 1: pdfplumber ──────────────────────────────────────────────────────
 
 def _extract_pdfplumber(file_bytes: bytes) -> List[Dict]:
     import pdfplumber
@@ -56,27 +43,35 @@ def _extract_pdfplumber(file_bytes: bytes) -> List[Dict]:
     return pages
 
 
-# ── Method 3: Tesseract OCR via PyMuPDF rendering ────────────────────────────
+# ── Method 2: PyPDF2 ──────────────────────────────────────────────────────────
+
+def _extract_pypdf2(file_bytes: bytes) -> List[Dict]:
+    from PyPDF2 import PdfReader
+    reader = PdfReader(io.BytesIO(file_bytes))
+    pages = []
+    for i, page in enumerate(reader.pages):
+        text = page.extract_text() or ""
+        pages.append({"page_num": i + 1, "text": text, "is_relevant": _is_relevant(text)})
+    return pages
+
+
+# ── Method 3: pdf2image + Tesseract OCR ──────────────────────────────────────
 
 def _extract_ocr(file_bytes: bytes) -> List[Dict]:
     """
-    Render each page to an image with PyMuPDF, then OCR with pytesseract.
-    Requires: pip3 install pymupdf pytesseract pillow
-              brew install tesseract tesseract-lang   (macOS)
-           or apt install tesseract-ocr tesseract-ocr-spa  (Linux)
+    Render pages with pdf2image (poppler), then OCR with pytesseract.
+    System requirements:
+      macOS:  brew install tesseract tesseract-lang poppler
+      Linux:  apt install tesseract-ocr tesseract-ocr-spa poppler-utils
+    Python:   pip install pdf2image pytesseract pillow
     """
-    import fitz
     import pytesseract
-    from PIL import Image
+    from pdf2image import convert_from_bytes
 
-    doc = fitz.open(stream=file_bytes, filetype="pdf")
-    mat = fitz.Matrix(150 / 72, 150 / 72)  # 150 DPI — good balance for OCR accuracy
+    images = convert_from_bytes(file_bytes, dpi=150)
     pages = []
-
-    for i, page in enumerate(doc):
+    for i, img in enumerate(images):
         try:
-            pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB)
-            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
             text = pytesseract.image_to_string(img, lang="spa+eng",
                                                config="--psm 1 --oem 3")
             pages.append({"page_num": i + 1, "text": text,
@@ -84,15 +79,13 @@ def _extract_ocr(file_bytes: bytes) -> List[Dict]:
         except Exception as e:
             logger.warning(f"OCR failed on page {i+1}: {e}")
             pages.append({"page_num": i + 1, "text": "", "is_relevant": False})
-
-    doc.close()
     return pages
 
 
 # ── Method 0: plain-text files ────────────────────────────────────────────────
 
 def _extract_txt(file_bytes: bytes) -> List[Dict]:
-    """Read a plain-text file and split into ~3000-char 'pages'."""
+    """Read a plain-text file and split into ~3000-char chunks."""
     text = file_bytes.decode("utf-8", errors="replace")
     chunk_size = 3000
     pages = []
@@ -107,59 +100,47 @@ def _extract_txt(file_bytes: bytes) -> List[Dict]:
 def extract_text_from_pdf(file_bytes: bytes, filename: str) -> Tuple[List[Dict], bool]:
     """
     Returns (pages_data, used_ocr).
-    pages_data = [{"page_num": int, "text": str, "is_relevant": bool}]
     Accepts .txt (direct read) and .pdf (three-method fallback).
     """
-    # .txt — just read directly
     if Path(filename).suffix.lower() == ".txt":
         pages = _extract_txt(file_bytes)
         total = sum(len(p["text"]) for p in pages)
         logger.info(f"{filename}: plain-text read → {total} chars")
         return pages, False
 
-    # Method 1 — PyMuPDF direct
-    try:
-        pages = _extract_fitz(file_bytes)
-        total = sum(len(p["text"]) for p in pages)
-        if total >= MIN_TEXT_CHARS:
-            logger.info(f"{filename}: fitz extraction → {total} chars")
-            return pages, False
-        logger.info(f"{filename}: fitz got {total} chars (too low) → trying pdfplumber")
-    except Exception as e:
-        logger.warning(f"{filename}: fitz failed: {e}")
-
-    # Method 2 — pdfplumber
+    # Method 1 — pdfplumber
     try:
         pages = _extract_pdfplumber(file_bytes)
         total = sum(len(p["text"]) for p in pages)
         if total >= MIN_TEXT_CHARS:
             logger.info(f"{filename}: pdfplumber → {total} chars")
             return pages, False
-        logger.info(f"{filename}: pdfplumber got {total} chars (too low) → trying OCR")
+        logger.info(f"{filename}: pdfplumber got {total} chars → trying PyPDF2")
     except Exception as e:
         logger.warning(f"{filename}: pdfplumber failed: {e}")
 
-    # Method 3 — Tesseract OCR (required for scanned/image PDFs)
+    # Method 2 — PyPDF2
     try:
-        import pytesseract  # noqa — just check it's installed
-        import fitz          # noqa
-    except ImportError as ie:
-        missing = "pytesseract" if "pytesseract" in str(ie) else "pymupdf"
-        raise RuntimeError(
-            f"This PDF is a scanned image and requires OCR.\n"
-            f"Run these two commands in Terminal, then restart the server:\n\n"
-            f"  brew install tesseract tesseract-lang\n"
-            f"  pip3 install pytesseract\n\n"
-            f"(Missing package: {missing})"
-        )
+        pages = _extract_pypdf2(file_bytes)
+        total = sum(len(p["text"]) for p in pages)
+        if total >= MIN_TEXT_CHARS:
+            logger.info(f"{filename}: PyPDF2 → {total} chars")
+            return pages, False
+        logger.info(f"{filename}: PyPDF2 got {total} chars → trying OCR")
+    except Exception as e:
+        logger.warning(f"{filename}: PyPDF2 failed: {e}")
 
+    # Method 3 — OCR
     try:
         pages = _extract_ocr(file_bytes)
         total = sum(len(p["text"]) for p in pages)
         logger.info(f"{filename}: OCR → {total} chars")
         return pages, True
     except Exception as e:
-        raise RuntimeError(f"OCR failed: {e}")
+        raise RuntimeError(
+            f"All extraction methods failed. Last error: {e}\n"
+            "For scanned PDFs, ensure tesseract and poppler are installed."
+        )
 
 
 def build_analysis_context(pages_data: List[Dict], max_chars: int = 50000) -> str:
