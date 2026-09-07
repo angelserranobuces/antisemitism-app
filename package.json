@@ -1,0 +1,12 @@
+{
+  "name": "media-framing-risk-analyser",
+  "version": "1.0.0",
+  "description": "IHRA-informed antisemitic framing risk analyser for Spanish newspapers",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

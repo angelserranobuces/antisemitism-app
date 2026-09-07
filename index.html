@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Media Framing Risk Analyser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #0F1117;
+  --surf:     #1A1D27;
+  --surf2:    #222639;
+  --surf3:    #2A2F45;
+  --border:   #2E3350;
+  --border2:  #3A4060;
+  --text:     #E8EAF0;
+  --muted:    #9BA3BC;
+  --faint:    #5A6180;
+  --p400:     #7F77DD;
+  --p500:     #6B62D4;
+  --p600:     #534AB7;
+  --p50:      #1E1B3A;
+  --green:    #4CAF50;
+  --green-bg: #0D2B0E;
+  --amber:    #FFC107;
+  --amber-bg: #2B2100;
+  --coral:    #FF7043;
+  --coral-bg: #2B1200;
+  --red:      #EF5350;
+  --red-bg:   #2B0A0A;
+  --rsm: 6px; --rmd: 10px; --rlg: 14px; --rxl: 18px;
+  /* newspaper colours */
+  --elpais:  #4A90D9;
+  --elmundo: #F5A623;
+  --larazon: #7ED321;
+  --abc:     #E05252;
+}
+body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; line-height:1.6; }
+.wrap { max-width:900px; margin:0 auto; padding:2rem 1.5rem 5rem; }
+
+/* ── Masthead ── */
+.masthead { display:flex; align-items:center; gap:14px; margin-bottom:2.5rem; padding-bottom:1.5rem; border-bottom:1px solid var(--border); }
+.m-icon { width:44px;height:44px;background:var(--p50);border-radius:var(--rmd);display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.m-icon svg { width:24px;height:24px;stroke:var(--p400);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round; }
+.masthead h1 { font-size:18px;font-weight:600;letter-spacing:-.02em;color:var(--text); }
+.masthead p  { font-size:13px;color:var(--muted);margin-top:2px; }
+.pill { display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:3px 10px;border-radius:99px;background:var(--p50);color:var(--p400);letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--p600); }
+
+/* ── Intro ── */
+.intro { margin-bottom:2rem; }
+.intro h2 { font-size:28px;font-weight:700;letter-spacing:-.03em;line-height:1.2;margin:0.75rem 0; color:var(--text); }
+.intro > p { font-size:14px;color:var(--muted);line-height:1.75;max-width:640px; }
+.features { display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:1.25rem 0 2rem; }
+.feat { background:var(--surf);border:1px solid var(--border);border-radius:var(--rmd);padding:12px 14px; }
+.feat-icon { font-size:18px;margin-bottom:6px; }
+.feat p { font-size:12px;color:var(--muted);line-height:1.45; }
+
+/* ── Upload card ── */
+.card { background:var(--surf);border:1px solid var(--border);border-radius:var(--rlg);padding:1.25rem 1.5rem;margin-bottom:1rem; }
+.clabel { font-size:13px;font-weight:500;margin-bottom:.75rem;display:flex;align-items:center;gap:6px;color:var(--muted); }
+.clabel svg { width:15px;height:15px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0; }
+.upload-zone { border:1.5px dashed var(--border2);border-radius:var(--rlg);padding:2.25rem 1.5rem;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:var(--bg); }
+.upload-zone:hover,.upload-zone.drag { border-color:var(--p400);background:var(--p50); }
+.u-icon { width:52px;height:52px;border-radius:50%;background:var(--p50);display:flex;align-items:center;justify-content:center;margin:0 auto 14px; }
+.u-icon svg { width:24px;height:24px;stroke:var(--p400);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round; }
+.upload-zone h3 { font-size:15px;font-weight:500;margin-bottom:4px;color:var(--text); }
+.upload-zone p  { font-size:13px;color:var(--faint); }
+.file-row { display:flex;align-items:center;gap:12px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--rlg);padding:12px 16px;margin-top:10px; }
+.f-thumb { width:38px;height:38px;background:var(--p50);border-radius:var(--rsm);display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.f-thumb svg { width:20px;height:20px;stroke:var(--p400);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round; }
+.f-meta { flex:1;min-width:0; }
+.f-meta .nm { font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text); }
+.f-meta .sz { font-size:12px;color:var(--faint);margin-top:1px; }
+.rm-btn { font-size:12px;padding:4px 10px;border:1px solid var(--border2);border-radius:var(--rsm);background:var(--surf3);color:var(--muted);cursor:pointer;font-family:inherit;flex-shrink:0; }
+.rm-btn:hover { background:var(--red-bg);color:var(--red);border-color:var(--red); }
+.row2 { display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px; }
+.field label { font-size:12px;color:var(--muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;font-weight:500; }
+input[type=text],input[type=date],select {
+  width:100%;height:40px;padding:0 12px;border:1px solid var(--border2);border-radius:var(--rmd);
+  font-size:14px;font-family:inherit;color:var(--text);background:var(--surf2);outline:none;transition:border-color .15s;
+}
+input:focus,select:focus { border-color:var(--p400); }
+select { appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239BA3BC' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px; }
+select option { background:var(--surf2); }
+
+/* detect strip */
+.detect-strip { display:none;align-items:center;gap:7px;font-size:12px;color:var(--muted);margin-top:10px;padding:8px 12px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--rmd); }
+.det-spinner { width:12px;height:12px;border:1.5px solid var(--border2);border-top-color:var(--p400);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0; }
+
+/* ── Buttons ── */
+.abtn { width:100%;height:52px;margin-top:14px;border:none;border-radius:var(--rlg);background:var(--p600);color:#fff;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .15s,transform .1s;letter-spacing:-.01em; }
+.abtn:hover:not(:disabled) { background:var(--p500); }
+.abtn:active:not(:disabled) { transform:scale(.99); }
+.abtn:disabled { background:var(--surf3);color:var(--faint);cursor:not-allowed; }
+.abtn svg { width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round; }
+.ghost-btn { font-size:13px;padding:7px 16px;border:1px solid var(--border2);border-radius:var(--rmd);background:transparent;color:var(--muted);cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:background .12s; }
+.ghost-btn:hover { background:var(--surf2); }
+.ghost-btn svg { width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round; }
+.danger-btn { font-size:12px;padding:5px 12px;border:1px solid var(--border2);border-radius:var(--rsm);background:transparent;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .12s; }
+.danger-btn:hover { background:var(--red-bg);color:var(--red);border-color:var(--red); }
+
+/* ── Strips ── */
+.info-strip { display:flex;gap:8px;background:var(--surf);border:1px solid var(--border);border-radius:var(--rmd);padding:10px 14px;margin-top:12px; }
+.info-strip svg { width:15px;height:15px;stroke:var(--faint);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;margin-top:2px; }
+.info-strip p { font-size:12px;color:var(--faint);line-height:1.55; }
+.err-strip { display:none;gap:8px;background:var(--red-bg);border:1px solid var(--red);border-radius:var(--rmd);padding:10px 14px;margin-top:12px; }
+.err-strip svg { width:15px;height:15px;stroke:var(--red);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;margin-top:2px; }
+.err-strip p { font-size:13px;color:var(--red);line-height:1.5; }
+
+/* ── Spinner ── */
+.spin-area { display:none;text-align:center;padding:3rem 1rem; }
+.spinner { width:32px;height:32px;border:3px solid var(--border2);border-top-color:var(--p400);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 16px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.spin-area p { font-size:14px;color:var(--muted); }
+
+/* ── Divider ── */
+.divider { border:none;border-top:1px solid var(--border);margin:2rem 0 1.5rem; }
+
+/* ── Analysis result ── */
+.results-sec { display:none; }
+.score-hero { background:var(--surf);border:1px solid var(--border);border-radius:var(--rxl);padding:2rem 1.5rem;text-align:center;margin-bottom:1rem; }
+.sc-pub { font-size:13px;color:var(--faint);margin-bottom:6px;min-height:20px; }
+.sc-num { font-size:72px;font-weight:700;letter-spacing:-.05em;line-height:1; }
+.sc-lbl { font-size:14px;color:var(--muted);margin:8px 0 14px; }
+.rbadge { display:inline-block;font-size:12px;font-weight:600;padding:5px 16px;border-radius:99px;letter-spacing:.02em; }
+.sc-conf { font-size:12px;color:var(--faint);margin-top:10px; }
+.cat-row { display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border); }
+.cat-row:last-child { border-bottom:none; }
+.cat-nm { font-size:13px;flex:1;min-width:0;color:var(--muted); }
+.bar-bg { flex:1;height:5px;background:var(--surf3);border-radius:3px;overflow:hidden;max-width:180px; }
+.bar-fill { height:100%;border-radius:3px;transition:width .6s ease; }
+.cat-sc { font-size:13px;font-weight:600;min-width:28px;text-align:right; }
+.ev-box { background:var(--surf2);border:1px solid var(--border);border-radius:var(--rmd);padding:14px 16px;font-size:14px;color:var(--muted);line-height:1.7;margin-top:8px; }
+textarea { width:100%;min-height:90px;padding:10px 12px;border:1px solid var(--border2);border-radius:var(--rmd);font-size:13px;font-family:inherit;color:var(--text);background:var(--surf2);resize:vertical;outline:none;line-height:1.6;margin-top:6px;transition:border-color .15s; }
+textarea:focus { border-color:var(--p400); }
+
+/* ── Newspaper cards ── */
+.section-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem; }
+.section-title { font-size:16px;font-weight:600;color:var(--text);letter-spacing:-.02em; }
+.section-sub { font-size:13px;color:var(--faint);margin-top:2px; }
+.np-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:1.5rem; }
+.np-card { background:var(--surf);border:1px solid var(--border);border-radius:var(--rlg);padding:1.25rem;transition:box-shadow .15s,border-color .15s;cursor:default;position:relative;overflow:hidden; }
+.np-card:hover { box-shadow:0 8px 24px rgba(0,0,0,.4);border-color:var(--border2); }
+.np-card::before { content:'';position:absolute;top:0;left:0;right:0;height:3px; }
+.np-card-paper { font-size:13px;font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.np-card-date { font-size:11px;color:var(--faint);margin-bottom:12px; }
+.np-card-frs { font-size:40px;font-weight:700;letter-spacing:-.04em;line-height:1; }
+.np-card-scale { font-size:11px;color:var(--faint);margin-bottom:10px; }
+.np-card-badge { display:inline-block;font-size:10px;font-weight:600;padding:3px 10px;border-radius:99px;margin-bottom:10px;letter-spacing:.02em; }
+.np-card-ev { font-size:11px;color:var(--faint);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden; }
+.np-card-del { position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s,background .12s; }
+.np-card:hover .np-card-del { opacity:1; }
+.np-card-del:hover { background:var(--red-bg); }
+.np-card-del svg { width:12px;height:12px;stroke:var(--red);fill:none;stroke-width:2.5;stroke-linecap:round; }
+.np-empty { font-size:13px;color:var(--faint);padding:1.5rem 0 0.5rem; }
+
+/* ── Tabs ── */
+.tabs { display:flex;gap:2px;background:var(--surf);border:1px solid var(--border);border-radius:var(--rmd);padding:3px;margin-bottom:1.25rem; }
+.tab-btn { flex:1;padding:8px 12px;border:none;border-radius:var(--rsm);background:transparent;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .12s,color .12s; }
+.tab-btn.active { background:var(--surf3);color:var(--text); }
+.tab-btn:hover:not(.active) { background:var(--surf2);color:var(--text); }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* ── Score matrix ── */
+.matrix-wrap { overflow-x:auto; }
+.matrix-table { border-collapse:collapse;font-size:12px;width:100%;min-width:600px; }
+.matrix-table th { padding:8px 12px;text-align:left;font-weight:500;color:var(--faint);border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.04em;background:var(--surf);white-space:nowrap; }
+.matrix-table th.paper-col { text-align:center;color:var(--text);font-size:12px;text-transform:none;letter-spacing:0; }
+.matrix-table td { padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text);text-align:center; }
+.matrix-table td.cat-label { text-align:left;color:var(--muted);font-size:12px; }
+.matrix-table td.weight { color:var(--faint);font-size:11px; }
+.matrix-table tr:last-child td { border-bottom:none;font-weight:700; }
+.matrix-table tr:hover td { background:var(--surf2); }
+.score-0 { color:var(--green); }
+.score-1, .score-2 { color:var(--amber); }
+.score-3, .score-4, .score-5 { color:var(--coral); }
+.score-overall { font-size:13px;font-weight:700; }
+
+/* ── Ranking ── */
+.rank-row { background:var(--surf);border:1px solid var(--border);border-radius:var(--rlg);padding:1rem 1.25rem;margin-bottom:10px;display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:start; }
+.rank-num { font-size:22px;font-weight:700;color:var(--faint);line-height:1.2; }
+.rank-num.gold   { color:#FFD700; }
+.rank-num.silver { color:#C0C0C0; }
+.rank-num.bronze { color:#CD7F32; }
+.rank-paper { font-size:14px;font-weight:600;margin-bottom:2px; }
+.rank-date  { font-size:12px;color:var(--faint);margin-bottom:8px; }
+.rank-drivers { font-size:13px;color:var(--muted);line-height:1.65; }
+.rank-score { text-align:right; }
+.rank-frs { font-size:26px;font-weight:700;line-height:1; }
+
+/* ── Evidence ── */
+.ev-entry { background:var(--surf);border:1px solid var(--border);border-radius:var(--rlg);padding:1rem 1.25rem;margin-bottom:10px; }
+.ev-header { display:flex;align-items:center;gap:10px;margin-bottom:10px; }
+.ev-paper { font-size:14px;font-weight:600; }
+.ev-date  { font-size:12px;color:var(--faint); }
+.ev-text  { font-size:13px;color:var(--muted);line-height:1.7; }
+.ev-notes { margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--faint);font-style:italic; }
+
+/* ── Chart ── */
+.chart-wrap { background:var(--surf);border:1px solid var(--border);border-radius:var(--rlg);padding:1.5rem;margin-bottom:1rem;overflow-x:auto; }
+.chart-title { font-size:14px;font-weight:500;color:var(--muted);margin-bottom:1.25rem;display:flex;align-items:center;gap:6px; }
+#frsChart { display:block;width:100%;min-width:480px; }
+.legend { display:flex;flex-wrap:wrap;gap:16px;margin-bottom:1rem; }
+.leg-item { display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted); }
+.leg-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0; }
+
+/* ── History table ── */
+.tbl-wrap { background:var(--surf);border:1px solid var(--border);border-radius:var(--rlg);overflow:hidden;margin-bottom:1rem; }
+table { width:100%;border-collapse:collapse;font-size:13px; }
+th { background:var(--surf2);padding:10px 14px;text-align:left;font-weight:500;color:var(--faint);border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.04em; }
+td { padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text); }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:var(--surf2); }
+.np-badge-sm { display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px; }
+.del-btn { font-size:11px;padding:3px 8px;border:1px solid var(--border2);border-radius:var(--rsm);background:transparent;color:var(--faint);cursor:pointer;font-family:inherit; }
+.del-btn:hover { background:var(--red-bg);color:var(--red);border-color:var(--red); }
+.empty-state { text-align:center;padding:3rem 1rem;color:var(--faint);font-size:14px; }
+
+/* ── Downloads ── */
+.dl-card { background:var(--surf);border:1px solid var(--border);border-radius:var(--rlg);padding:1.25rem 1.5rem;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:16px; }
+.dl-info h4 { font-size:14px;font-weight:600;margin-bottom:3px; }
+.dl-info p  { font-size:13px;color:var(--muted); }
+.dl-btn { padding:8px 18px;border:1px solid var(--p600);border-radius:var(--rmd);background:var(--p50);color:var(--p400);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .12s; }
+.dl-btn:hover { background:var(--p600);color:#fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Masthead -->
+  <div class="masthead">
+    <div class="m-icon">
+      <svg viewBox="0 0 24 24"><path d="M4 4h16v2H4zM4 9h10v2H4zM4 14h16v2H4zM4 19h10v2H4z"/></svg>
+    </div>
+    <div>
+      <h1>Media Framing Risk Analyser</h1>
+      <p>IHRA-informed antisemitic framing detection · El País · El Mundo · La Razón · ABC</p>
+    </div>
+  </div>
+
+  <!-- Intro -->
+  <div class="intro">
+    <span class="pill">&#9679; IHRA-Informed Methodology</span>
+    <h2>Assess antisemitic framing risk in newspaper editions</h2>
+    <p>Upload a newspaper PDF and this tool evaluates it across nine IHRA-informed indicators — from conspiracy tropes to contextual omission — producing a weighted Framing Risk Score from 0 to 5. Results are stored by newspaper and date so you can track framing trends over time.</p>
+    <div class="features">
+      <div class="feat"><div class="feat-icon">&#9776;</div><p>9-category weighted scoring</p></div>
+      <div class="feat"><div class="feat-icon">&#9680;</div><p>0–5 framing risk scale</p></div>
+      <div class="feat"><div class="feat-icon">&#128200;</div><p>Historical trend chart</p></div>
+      <div class="feat"><div class="feat-icon">&#9741;</div><p>Evidence summaries</p></div>
+      <div class="feat"><div class="feat-icon">&#9638;</div><p>Score matrix</p></div>
+      <div class="feat"><div class="feat-icon">&#8650;</div><p>CSV export</p></div>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="card">
+    <div class="clabel">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Upload newspaper PDF
+    </div>
+    <div class="upload-zone" id="dropzone"
+      onclick="document.getElementById('fileInput').click()"
+      ondragover="onDragOver(event)" ondragleave="onDragLeave()" ondrop="onDrop(event)">
+      <div class="u-icon">
+        <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+      </div>
+      <h3>Drop your PDF here</h3>
+      <p>or click to browse your files</p>
+    </div>
+    <input type="file" id="fileInput" accept="application/pdf" style="display:none">
+    <div class="file-row" id="fileRow" style="display:none">
+      <div class="f-thumb"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+      <div class="f-meta"><div class="nm" id="fname"></div><div class="sz" id="fsize"></div></div>
+      <button class="rm-btn" onclick="clearFile()">Remove</button>
+    </div>
+    <div class="detect-strip" id="detectStatus"></div>
+    <div class="row2">
+      <div class="field">
+        <label for="pubSelect">Newspaper</label>
+        <select id="pubSelect">
+          <option value="">— Select —</option>
+          <option value="El Mundo">El Mundo</option>
+          <option value="La Razón">La Razón</option>
+          <option value="ABC">ABC</option>
+          <option value="El País">El País</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="pubDate">Edition date</label>
+        <input type="date" id="pubDate">
+      </div>
+    </div>
+  </div>
+
+  <button class="abtn" id="analyseBtn" disabled>
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    Analyse for framing risk
+  </button>
+
+  <div class="err-strip" id="errStrip">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <p id="errMsg"></p>
+  </div>
+
+  <div class="info-strip">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+    <p>This tool evaluates framing-risk indicators, not proven antisemitic intent. Results are a structured media-risk analysis, not a definitive moral or legal classification. Human review remains essential.</p>
+  </div>
+
+  <!-- Spinner -->
+  <div class="spin-area" id="spinArea">
+    <div class="spinner"></div>
+    <p id="statusMsg">Sending document to analysis engine…</p>
+  </div>
+
+  <!-- Per-analysis result -->
+  <div class="results-sec" id="resultsSec">
+    <div class="divider"></div>
+    <div class="section-header">
+      <div><div class="section-title">Analysis result</div></div>
+      <button class="ghost-btn" onclick="resetTool()">
+        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+        Analyse another
+      </button>
+    </div>
+    <div class="score-hero">
+      <p class="sc-pub" id="resPub"></p>
+      <div class="sc-num" id="resFrs">—</div>
+      <p class="sc-lbl">Framing Risk Score (0–5)</p>
+      <span class="rbadge" id="resBadge"></span>
+      <p class="sc-conf" id="resConf"></p>
+    </div>
+    <div class="card">
+      <div class="clabel">Category breakdown</div>
+      <div id="catRows"></div>
+    </div>
+    <div class="card">
+      <div class="clabel">Evidence summary</div>
+      <div class="ev-box" id="resEvidence"></div>
+    </div>
+    <div class="card">
+      <div class="clabel">Analyst notes</div>
+      <p style="font-size:12px;color:var(--faint);margin-bottom:4px">Add your observations for audit purposes</p>
+      <textarea id="analystNotes" placeholder="Enter contextual notes, caveats, or observations…"></textarea>
+    </div>
+  </div>
+
+  <!-- Previously analysed editions cards -->
+  <div id="npCardsSection">
+    <div class="divider"></div>
+    <div class="section-header">
+      <div>
+        <div class="section-title">Previously analysed editions</div>
+        <div class="section-sub">Sorted newest first — click ✕ on a card to delete it</div>
+      </div>
+      <button class="danger-btn" onclick="clearAll()" id="clearAllBtn" style="display:none">Clear all</button>
+    </div>
+    <p class="np-empty" id="npEmpty">No analyses yet — upload a newspaper PDF above to get started.</p>
+    <div class="np-grid" id="npGrid"></div>
+  </div>
+
+  <!-- Tabs: Summary · Score Matrix · Ranking · Evidence · Downloads -->
+  <div class="divider"></div>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('summary',this)">Summary</button>
+    <button class="tab-btn" onclick="switchTab('matrix',this)">Score Matrix</button>
+    <button class="tab-btn" onclick="switchTab('ranking',this)">Ranking</button>
+    <button class="tab-btn" onclick="switchTab('evidence',this)">Evidence</button>
+    <button class="tab-btn" onclick="switchTab('downloads',this)">Downloads</button>
+  </div>
+
+  <!-- Summary tab -->
+  <div class="tab-panel active" id="tab-summary">
+    <div class="legend" id="legend"></div>
+    <div class="chart-wrap">
+      <div class="chart-title">&#128200; Historical Trend — Overall Risk Rating</div>
+      <svg id="frsChart" viewBox="0 0 760 280" xmlns="http://www.w3.org/2000/svg"></svg>
+      <p style="font-size:11px;color:var(--faint);text-align:center;margin-top:8px">Trend lines show all analysed editions stored in the database. Updated automatically after each analysis.</p>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Newspaper</th><th>FRS (0–5)</th><th>Risk level</th><th>Confidence</th><th></th></tr></thead>
+        <tbody id="histBody"></tbody>
+      </table>
+      <div class="empty-state" id="emptyHist">No analyses recorded yet.</div>
+    </div>
+  </div>
+
+  <!-- Score Matrix tab -->
+  <div class="tab-panel" id="tab-matrix">
+    <div class="card">
+      <div class="clabel">&#9638; Category Score Matrix</div>
+      <div class="matrix-wrap">
+        <table class="matrix-table" id="matrixTable">
+          <thead id="matrixHead"></thead>
+          <tbody id="matrixBody"></tbody>
+        </table>
+        <div class="empty-state" id="emptyMatrix">No analyses recorded yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ranking tab -->
+  <div class="tab-panel" id="tab-ranking">
+    <div id="rankingList"></div>
+    <div class="empty-state" id="emptyRanking">No analyses recorded yet.</div>
+  </div>
+
+  <!-- Evidence tab -->
+  <div class="tab-panel" id="tab-evidence">
+    <div id="evidenceList"></div>
+    <div class="empty-state" id="emptyEvidence">No analyses recorded yet.</div>
+  </div>
+
+  <!-- Downloads tab -->
+  <div class="tab-panel" id="tab-downloads">
+    <div class="dl-card">
+      <div class="dl-info">
+        <h4>Export as CSV</h4>
+        <p>All analysed editions with FRS scores and category breakdowns in spreadsheet format</p>
+      </div>
+      <button class="dl-btn" onclick="downloadCSV()">Download CSV</button>
+    </div>
+    <div class="dl-card">
+      <div class="dl-info">
+        <h4>Export as JSON</h4>
+        <p>Full dataset including evidence summaries and all category scores</p>
+      </div>
+      <button class="dl-btn" onclick="downloadJSON()">Download JSON</button>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<script>
+// API key is held securely on the server — no key needed here
+var PAPERS = ['El Mundo','La Razón','ABC','El País'];
+var COLORS = { 'El Mundo':'#F5A623', 'La Razón':'#7ED321', 'ABC':'#E05252', 'El País':'#4A90D9' };
+var CATS = [
+  {key:'CB', label:'Collective Blame',                    w:.20},
+  {key:'CT', label:'Conspiracy Tropes',                   w:.20},
+  {key:'HI', label:'Holocaust Inversion',                 w:.15},
+  {key:'D',  label:'Demonisation',                        w:.10},
+  {key:'DSD',label:'Denial of Self-Determination',        w:.10},
+  {key:'DS', label:'Double Standards',                    w:.10},
+  {key:'DH', label:'Dehumanisation',                      w:.05},
+  {key:'AE', label:'Asymmetric Empathy',                  w:.05},
+  {key:'CO', label:'Contextual Omission',                 w:.05},
+];
+var STORAGE_KEY = 'framing_risk_history_v2';
+var b64 = null;
+
+// ── Storage ────────────────────────────────────────────────────────────────
+function loadHistory() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); } catch(e){ return []; } }
+function saveHistory(h) { localStorage.setItem(STORAGE_KEY, JSON.stringify(h)); }
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('pubDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('pubSelect').addEventListener('change', checkReady);
+  document.getElementById('pubDate').addEventListener('change', checkReady);
+  document.getElementById('analyseBtn').addEventListener('click', analyse);
+  document.getElementById('fileInput').addEventListener('change', function() {
+    if (this.files && this.files[0]) handleFile(this.files[0]);
+  });
+  renderAll();
+});
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function checkReady() {
+  var pub = document.getElementById('pubSelect').value;
+  var dt  = document.getElementById('pubDate').value;
+  document.getElementById('analyseBtn').disabled = !(b64 && pub && dt);
+}
+
+// ── File handling ──────────────────────────────────────────────────────────
+function onDragOver(e) { e.preventDefault(); document.getElementById('dropzone').classList.add('drag'); }
+function onDragLeave()  { document.getElementById('dropzone').classList.remove('drag'); }
+function onDrop(e) {
+  e.preventDefault(); document.getElementById('dropzone').classList.remove('drag');
+  var f = e.dataTransfer.files[0];
+  if (f && f.type==='application/pdf') handleFile(f); else showError('Please upload a PDF file.');
+}
+function handleFile(f) {
+  if (!f) return;
+  hideError();
+  document.getElementById('fname').textContent = f.name;
+  document.getElementById('fsize').textContent = (f.size/1024/1024).toFixed(2)+' MB';
+  document.getElementById('fileRow').style.display = 'flex';
+  setDetectStatus('detecting');
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    b64 = e.target.result.split(',')[1];
+    checkReady();
+    autoDetect();
+  };
+  reader.onerror = function() { showError('Could not read file.'); };
+  reader.readAsDataURL(f);
+}
+function clearFile() {
+  b64 = null;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('fileRow').style.display = 'none';
+  document.getElementById('detectStatus').style.display = 'none';
+  document.getElementById('pubSelect').value = '';
+  document.getElementById('pubDate').value = new Date().toISOString().slice(0,10);
+  checkReady();
+}
+function showError(m) { document.getElementById('errMsg').textContent=m; document.getElementById('errStrip').style.display='flex'; }
+function hideError()   { document.getElementById('errStrip').style.display='none'; }
+function setStatus(m)  { document.getElementById('statusMsg').textContent=m; }
+
+// ── Auto-detect ────────────────────────────────────────────────────────────
+function autoDetect() {
+  if (!b64) return;
+  var sys = 'You are a document metadata extractor. Read the first page of this Spanish newspaper PDF and identify:\n1. The newspaper name — must be exactly one of: "El Mundo", "La Razón", "ABC", "El País".\n2. The edition date in YYYY-MM-DD format.\nRespond ONLY with valid JSON: {"newspaper":"El País","date":"2024-03-15"}';
+  callAPI(sys, 'Identify the newspaper name and edition date from this Spanish newspaper PDF.', 100)
+  .then(function(raw) {
+    var meta = JSON.parse(raw);
+    if (meta.newspaper && PAPERS.indexOf(meta.newspaper)!==-1) document.getElementById('pubSelect').value = meta.newspaper;
+    if (meta.date && /^\d{4}-\d{2}-\d{2}$/.test(meta.date)) document.getElementById('pubDate').value = meta.date;
+    setDetectStatus('done'); checkReady();
+  }).catch(function() { setDetectStatus('failed'); });
+}
+function setDetectStatus(state) {
+  var el = document.getElementById('detectStatus');
+  if (state==='detecting') { el.style.display='flex'; el.innerHTML='<span class="det-spinner"></span><span>Detecting newspaper and date…</span>'; }
+  else if (state==='done')  { el.style.display='flex'; el.innerHTML='<span style="color:#4CAF50;font-size:14px">&#10003;</span><span>Detected — please confirm or adjust below</span>'; }
+  else { el.style.display='flex'; el.innerHTML='<span style="color:var(--faint)">&#8212;</span><span>Could not auto-detect — please select manually</span>'; }
+}
+
+// ── API helper ─────────────────────────────────────────────────────────────
+function callAPI(sys, userText, maxTokens) {
+  return fetch('/api/messages', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens: maxTokens,
+      system: sys,
+      messages:[{role:'user',content:[
+        {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
+        {type:'text',text:userText}
+      ]}]
+    })
+  })
+  .then(function(res) {
+    if (!res.ok) return res.json().then(function(e){ throw new Error(e.error?e.error.message:'HTTP '+res.status); });
+    return res.json();
+  })
+  .then(function(data) {
+    if (!data.content||!data.content.length) throw new Error('Empty response');
+    return data.content.filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('').replace(/```json|```/g,'').trim();
+  });
+}
+
+// ── Analyse ────────────────────────────────────────────────────────────────
+function analyse() {
+  var pub = document.getElementById('pubSelect').value;
+  var dt  = document.getElementById('pubDate').value;
+  if (!b64||!pub||!dt) return;
+  hideError();
+  document.getElementById('analyseBtn').disabled = true;
+  document.getElementById('resultsSec').style.display = 'none';
+  document.getElementById('spinArea').style.display = 'block';
+  setStatus('Sending document to analysis engine…');
+
+  var sys = 'You are an expert media analyst applying the IHRA-informed Framing Risk Score (FRS) methodology.\n\nFRS = (CB*0.20)+(CT*0.20)+(HI*0.15)+(D*0.10)+(DSD*0.10)+(DS*0.10)+(DH*0.05)+(AE*0.05)+(CO*0.05)\nEach category score is 0-5. FRS is already on the 0-5 scale.\n\nCB=Collective Blame, CT=Conspiracy Tropes, HI=Holocaust Inversion, D=Demonisation, DSD=Denial of Jewish Self-Determination, DS=Double Standards, DH=Dehumanisation, AE=Asymmetric Empathy, CO=Contextual Omission.\n\nScore: 0=none,1=minimal,2=occasional,3=moderate,4=significant,5=pervasive\nConfidence: High=explicit+repeated, Medium=strong pattern, Low=isolated\n\nRespond ONLY with valid JSON:\n{"scores":{"CB":0,"CT":0,"HI":0,"D":0,"DSD":0,"DS":0,"DH":0,"AE":0,"CO":0},"frs":0.0,"confidence":"Medium","evidence":"2-4 sentence evidence summary.","main_drivers":"Detailed narrative explaining what drove the score, citing specific headlines, language and framing patterns observed."}';
+
+  setStatus('Analysing document content…');
+  callAPI(sys, 'Analyse this Spanish newspaper PDF for antisemitic framing and return the JSON assessment.', 1200)
+  .then(function(raw) {
+    var result;
+    try { result = JSON.parse(raw); } catch(e) { throw new Error('Could not parse analysis response.'); }
+    var frs = (typeof result.frs==='number'&&!isNaN(result.frs)) ? result.frs : CATS.reduce(function(a,c){return a+(result.scores[c.key]||0)*c.w;},0);
+    var entry = { id:Date.now(), date:dt, newspaper:pub, frs:parseFloat(frs.toFixed(2)), confidence:result.confidence||'Medium', evidence:result.evidence||'', main_drivers:result.main_drivers||result.evidence||'', scores:result.scores, notes:'' };
+    var h = loadHistory(); h.push(entry); saveHistory(h);
+    showResult(result, pub, dt);
+    renderAll();
+  })
+  .catch(function(err) {
+    document.getElementById('spinArea').style.display = 'none';
+    document.getElementById('analyseBtn').disabled = false;
+    showError('Analysis failed: '+err.message);
+  });
+}
+
+// ── Show result ────────────────────────────────────────────────────────────
+function barColor(s) { if(s<=1)return'#4CAF50'; if(s<=2)return'#FFC107'; if(s<=3)return'#FF7043'; return'#EF5350'; }
+function badgeStyle(f) {
+  if(f<1)  return{label:'No Risk',     bg:'#0D2B0E',color:'#4CAF50'};
+  if(f<2)  return{label:'Low',         bg:'#0D2B0E',color:'#7ED321'};
+  if(f<3)  return{label:'Moderate',    bg:'#2B2100',color:'#FFC107'};
+  if(f<4)  return{label:'High',        bg:'#2B1200',color:'#FF7043'};
+  return        {label:'Very High',    bg:'#2B0A0A',color:'#EF5350'};
+}
+function formatDate(d) { if(!d)return''; var p=d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+function paperColor(p) { return COLORS[p]||'#7F77DD'; }
+
+function showResult(r, pub, dt) {
+  document.getElementById('spinArea').style.display = 'none';
+  var frs = (typeof r.frs==='number'&&!isNaN(r.frs))?r.frs:CATS.reduce(function(a,c){return a+(r.scores[c.key]||0)*c.w;},0);
+  var col = paperColor(pub);
+  document.getElementById('resPub').textContent = pub+' — '+formatDate(dt);
+  document.getElementById('resFrs').textContent = frs.toFixed(2);
+  document.getElementById('resFrs').style.color = col;
+  var bs = badgeStyle(frs);
+  var badge = document.getElementById('resBadge');
+  badge.textContent=bs.label; badge.style.background=bs.bg; badge.style.color=bs.color;
+  document.getElementById('resConf').textContent = 'Confidence: '+(r.confidence||'Medium');
+  var rows = document.getElementById('catRows'); rows.innerHTML='';
+  CATS.forEach(function(c){
+    var s=typeof r.scores[c.key]==='number'?r.scores[c.key]:0;
+    var pct=Math.round(s/5*100); var bcol=barColor(s);
+    var row=document.createElement('div'); row.className='cat-row';
+    row.innerHTML='<span class="cat-nm">'+c.label+'</span><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+bcol+'"></div></div><span class="cat-sc" style="color:'+bcol+'">'+s.toFixed(1)+'</span>';
+    rows.appendChild(row);
+  });
+  document.getElementById('resEvidence').textContent = r.evidence||'No evidence summary returned.';
+  document.getElementById('analystNotes').value = '';
+  document.getElementById('resultsSec').style.display = 'block';
+  document.getElementById('resultsSec').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function resetTool() {
+  clearFile();
+  document.getElementById('resultsSec').style.display='none';
+  document.getElementById('spinArea').style.display='none';
+  document.getElementById('analystNotes').value='';
+  hideError();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── Render all views ───────────────────────────────────────────────────────
+function renderAll() {
+  var h = loadHistory();
+  h.sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:0; });
+  renderCards(h);
+  renderLegend();
+  renderChart(h);
+  renderTable(h);
+  renderMatrix(h);
+  renderRanking(h);
+  renderEvidence(h);
+}
+
+// ── Cards ──────────────────────────────────────────────────────────────────
+function renderCards(h) {
+  var grid=document.getElementById('npGrid');
+  var empty=document.getElementById('npEmpty');
+  var cb=document.getElementById('clearAllBtn');
+  grid.innerHTML='';
+  if(h.length===0){ empty.style.display='block'; cb.style.display='none'; return; }
+  empty.style.display='none'; cb.style.display='inline-block';
+  h.slice().reverse().forEach(function(e){
+    var bs=badgeStyle(e.frs); var col=paperColor(e.newspaper);
+    var ev=(e.evidence||'').slice(0,130)+((e.evidence||'').length>130?'…':'');
+    var card=document.createElement('div'); card.className='np-card';
+    card.style.setProperty('--card-col',col);
+    card.innerHTML=
+      '<style>.np-card::before{background:'+col+'}</style>'+
+      '<button class="np-card-del" onclick="deleteEntry('+e.id+');event.stopPropagation()" title="Delete"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'+
+      '<div class="np-card-paper" style="color:'+col+'">'+e.newspaper+'</div>'+
+      '<div class="np-card-date">'+formatDate(e.date)+'</div>'+
+      '<div class="np-card-frs" style="color:'+col+'">'+e.frs.toFixed(2)+'</div>'+
+      '<div class="np-card-scale">out of 5</div>'+
+      '<span class="np-card-badge" style="background:'+bs.bg+';color:'+bs.color+'">'+bs.label+'</span>'+
+      '<div class="np-card-ev">'+ev+'</div>';
+    grid.appendChild(card);
+  });
+}
+
+// ── Legend ─────────────────────────────────────────────────────────────────
+function renderLegend() {
+  var leg=document.getElementById('legend'); leg.innerHTML='';
+  PAPERS.forEach(function(p){
+    var d=document.createElement('div'); d.className='leg-item';
+    d.innerHTML='<span class="leg-dot" style="background:'+COLORS[p]+'"></span>'+p;
+    leg.appendChild(d);
+  });
+}
+
+// ── Table ──────────────────────────────────────────────────────────────────
+function renderTable(h) {
+  var tbody=document.getElementById('histBody');
+  var empty=document.getElementById('emptyHist');
+  tbody.innerHTML='';
+  if(h.length===0){ empty.style.display='block'; return; }
+  empty.style.display='none';
+  h.slice().reverse().forEach(function(e){
+    var bs=badgeStyle(e.frs); var col=paperColor(e.newspaper);
+    var tr=document.createElement('tr');
+    tr.innerHTML='<td>'+formatDate(e.date)+'</td>'+
+      '<td><span class="np-badge-sm" style="background:'+col+'22;color:'+col+'">'+e.newspaper+'</span></td>'+
+      '<td><strong style="color:'+col+'">'+e.frs.toFixed(2)+'</strong></td>'+
+      '<td><span class="np-badge-sm" style="background:'+bs.bg+';color:'+bs.color+'">'+bs.label+'</span></td>'+
+      '<td style="color:var(--faint)">'+e.confidence+'</td>'+
+      '<td><button class="del-btn" onclick="deleteEntry('+e.id+')">Delete</button></td>';
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Score Matrix ───────────────────────────────────────────────────────────
+function renderMatrix(h) {
+  var head=document.getElementById('matrixHead');
+  var body=document.getElementById('matrixBody');
+  var empty=document.getElementById('emptyMatrix');
+  head.innerHTML=''; body.innerHTML='';
+  if(h.length===0){ empty.style.display='block'; return; }
+  empty.style.display='none';
+  var sorted=h.slice().sort(function(a,b){ return b.frs-a.frs; });
+  var hRow='<tr><th>Category</th><th>Weight</th>';
+  sorted.forEach(function(e){ var col=paperColor(e.newspaper); hRow+='<th class="paper-col" style="color:'+col+'">'+e.newspaper+'<br><span style="font-size:10px;color:var(--faint)">'+formatDate(e.date)+'</span></th>'; });
+  hRow+='</tr>'; head.innerHTML=hRow;
+  CATS.forEach(function(c){
+    var row='<tr><td class="cat-label">'+c.label+'</td><td class="weight">'+(c.w*100).toFixed(0)+'%</td>';
+    sorted.forEach(function(e){
+      var s=e.scores&&typeof e.scores[c.key]==='number'?e.scores[c.key]:0;
+      var cls='score-'+Math.min(Math.floor(s),5);
+      row+='<td class="'+cls+'">'+s.toFixed(0)+'</td>';
+    });
+    row+='</tr>'; body.innerHTML+=row;
+  });
+  var totRow='<tr><td class="cat-label" style="font-weight:700;color:var(--text)">Overall Rating</td><td></td>';
+  sorted.forEach(function(e){ var col=paperColor(e.newspaper); totRow+='<td class="score-overall" style="color:'+col+'">'+e.frs.toFixed(2)+'</td>'; });
+  totRow+='</tr>'; body.innerHTML+=totRow;
+}
+
+// ── Ranking ────────────────────────────────────────────────────────────────
+function renderRanking(h) {
+  var list=document.getElementById('rankingList');
+  var empty=document.getElementById('emptyRanking');
+  list.innerHTML='';
+  if(h.length===0){ empty.style.display='block'; return; }
+  empty.style.display='none';
+  var sorted=h.slice().sort(function(a,b){ return b.frs-a.frs; });
+  sorted.forEach(function(e,i){
+    var bs=badgeStyle(e.frs); var col=paperColor(e.newspaper);
+    var medalClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
+    var numDisplay = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+    var div=document.createElement('div'); div.className='rank-row';
+    div.innerHTML=
+      '<div class="rank-num '+medalClass+'">'+numDisplay+'</div>'+
+      '<div>'+
+        '<div class="rank-paper" style="color:'+col+'">'+e.newspaper+'</div>'+
+        '<div class="rank-date">'+formatDate(e.date)+'</div>'+
+        '<div class="rank-drivers">'+( e.main_drivers||e.evidence||'No driver narrative available.')+'</div>'+
+      '</div>'+
+      '<div class="rank-score">'+
+        '<div class="rank-frs" style="color:'+col+'">'+e.frs.toFixed(2)+'</div>'+
+        '<div style="font-size:11px;color:var(--faint);margin-top:2px">/ 5</div>'+
+        '<span class="np-card-badge" style="background:'+bs.bg+';color:'+bs.color+';margin-top:6px;display:inline-block">'+bs.label+'</span>'+
+      '</div>';
+    list.appendChild(div);
+  });
+}
+
+// ── Evidence ───────────────────────────────────────────────────────────────
+function renderEvidence(h) {
+  var list=document.getElementById('evidenceList');
+  var empty=document.getElementById('emptyEvidence');
+  list.innerHTML='';
+  if(h.length===0){ empty.style.display='block'; return; }
+  empty.style.display='none';
+  h.slice().reverse().forEach(function(e){
+    var col=paperColor(e.newspaper);
+    var div=document.createElement('div'); div.className='ev-entry';
+    div.innerHTML=
+      '<div class="ev-header">'+
+        '<span style="width:10px;height:10px;border-radius:50%;background:'+col+';display:inline-block;flex-shrink:0"></span>'+
+        '<span class="ev-paper" style="color:'+col+'">'+e.newspaper+'</span>'+
+        '<span class="ev-date">'+formatDate(e.date)+'</span>'+
+        '<span class="np-badge-sm" style="background:'+badgeStyle(e.frs).bg+';color:'+badgeStyle(e.frs).color+';margin-left:auto">FRS '+e.frs.toFixed(2)+'</span>'+
+      '</div>'+
+      '<div class="ev-text">'+(e.evidence||'No evidence summary recorded.')+'</div>'+
+      (e.notes?'<div class="ev-notes">Analyst notes: '+e.notes+'</div>':'');
+    list.appendChild(div);
+  });
+}
+
+// ── Chart ──────────────────────────────────────────────────────────────────
+function renderChart(h) {
+  var svg=document.getElementById('frsChart'); svg.innerHTML='';
+  var W=760,H=280,padL=44,padR=24,padT=20,padB=52;
+  var cW=W-padL-padR, cH=H-padT-padB;
+  if(h.length===0){
+    var t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',W/2);t.setAttribute('y',H/2);t.setAttribute('text-anchor','middle');t.setAttribute('fill','#5A6180');t.setAttribute('font-size','13');
+    t.textContent='No data yet — run your first analysis above'; svg.appendChild(t); return;
+  }
+  var dateSet={};
+  h.forEach(function(e){ dateSet[e.date]=true; });
+  var dates=Object.keys(dateSet).sort(); var nDates=dates.length;
+  for(var yi=0;yi<=5;yi++){
+    var yp=padT+cH-(yi/5)*cH;
+    var gl=document.createElementNS('http://www.w3.org/2000/svg','line');
+    gl.setAttribute('x1',padL);gl.setAttribute('x2',W-padR);gl.setAttribute('y1',yp);gl.setAttribute('y2',yp);
+    gl.setAttribute('stroke',yi===0?'#3A4060':'#2E3350');gl.setAttribute('stroke-width','1');
+    svg.appendChild(gl);
+    var yl=document.createElementNS('http://www.w3.org/2000/svg','text');
+    yl.setAttribute('x',padL-8);yl.setAttribute('y',yp+4);yl.setAttribute('text-anchor','end');yl.setAttribute('font-size','11');yl.setAttribute('fill','#5A6180');
+    yl.textContent=yi; svg.appendChild(yl);
+  }
+  dates.forEach(function(d,i){
+    var xp=nDates===1?padL+cW/2:padL+(i/(nDates-1))*cW;
+    var xl=document.createElementNS('http://www.w3.org/2000/svg','text');
+    xl.setAttribute('x',xp);xl.setAttribute('y',H-padB+18);xl.setAttribute('text-anchor','middle');xl.setAttribute('font-size','10');xl.setAttribute('fill','#5A6180');
+    xl.textContent=formatDate(d); svg.appendChild(xl);
+    var tk=document.createElementNS('http://www.w3.org/2000/svg','line');
+    tk.setAttribute('x1',xp);tk.setAttribute('x2',xp);tk.setAttribute('y1',padT+cH);tk.setAttribute('y2',padT+cH+4);
+    tk.setAttribute('stroke','#3A4060');tk.setAttribute('stroke-width','1'); svg.appendChild(tk);
+  });
+  var byPaper={};
+  PAPERS.forEach(function(p){ byPaper[p]={}; });
+  h.forEach(function(e){ if(byPaper[e.newspaper]) byPaper[e.newspaper][e.date]=e.frs; });
+  PAPERS.forEach(function(paper){
+    var col=COLORS[paper]; var pts=[];
+    dates.forEach(function(d,i){
+      if(byPaper[paper][d]!==undefined){
+        var xp=nDates===1?padL+cW/2:padL+(i/(nDates-1))*cW;
+        var yp=padT+cH-(byPaper[paper][d]/5)*cH;
+        pts.push({x:xp,y:yp,frs:byPaper[paper][d]});
+      }
+    });
+    if(pts.length<1) return;
+    if(pts.length>=2){
+      var da=pts.map(function(p,i){ return (i===0?'M':'L')+p.x+' '+p.y; }).join(' ');
+      var path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d',da);path.setAttribute('fill','none');path.setAttribute('stroke',col);path.setAttribute('stroke-width','2.5');
+      path.setAttribute('stroke-linejoin','round');path.setAttribute('stroke-linecap','round');
+      svg.appendChild(path);
+    }
+    pts.forEach(function(p){
+      var ci=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      ci.setAttribute('cx',p.x);ci.setAttribute('cy',p.y);ci.setAttribute('r','5');
+      ci.setAttribute('fill',col);ci.setAttribute('stroke','#0F1117');ci.setAttribute('stroke-width','2');
+      var title=document.createElementNS('http://www.w3.org/2000/svg','title');
+      title.textContent=paper+': '+p.frs.toFixed(2); ci.appendChild(title);
+      svg.appendChild(ci);
+    });
+  });
+}
+
+// ── Delete / Clear ─────────────────────────────────────────────────────────
+function deleteEntry(id) {
+  var h=loadHistory().filter(function(e){ return e.id!==id; });
+  saveHistory(h); renderAll();
+}
+function clearAll() {
+  if(!confirm('Delete all records? This cannot be undone.')) return;
+  localStorage.removeItem(STORAGE_KEY); renderAll();
+}
+
+// ── Downloads ──────────────────────────────────────────────────────────────
+function downloadCSV() {
+  var h=loadHistory();
+  if(!h.length){ alert('No data to export.'); return; }
+  var rows=['Date,Newspaper,FRS,Risk Level,Confidence,CB,CT,HI,D,DSD,DS,DH,AE,CO'];
+  h.forEach(function(e){
+    var bs=badgeStyle(e.frs);
+    var cats=CATS.map(function(c){ return e.scores&&typeof e.scores[c.key]==='number'?e.scores[c.key]:0; }).join(',');
+    rows.push([e.date,e.newspaper,e.frs,bs.label,e.confidence,cats].join(','));
+  });
+  download('framing-risk-data.csv', rows.join('\n'), 'text/csv');
+}
+function downloadJSON() {
+  var h=loadHistory();
+  if(!h.length){ alert('No data to export.'); return; }
+  download('framing-risk-data.json', JSON.stringify(h,null,2), 'application/json');
+}
+function download(filename, text, type) {
+  var a=document.createElement('a');
+  a.href='data:'+type+';charset=utf-8,'+encodeURIComponent(text);
+  a.download=filename; a.click();
+}
+</script>
+</body>
+</html>
