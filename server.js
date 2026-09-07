@@ -3,16 +3,17 @@ const https = require('https');
 const fs    = require('fs');
 const path  = require('path');
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-const PORT = process.env.PORT || 3000;
-const MAX_BODY = 50 * 1024 * 1024; // 50 MB
+// ── Put your Anthropic API key here ───────────────────────────────────────
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || 'YOUR_API_KEY_HERE';
+const PORT = 3000;
+const MAX_BODY = 100 * 1024 * 1024; // 100 MB — handles large scanned newspaper PDFs
 
+// ── MIME types ─────────────────────────────────────────────────────────────
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js':   'application/javascript',
   '.css':  'text/css',
   '.ico':  'image/x-icon',
-  '.png':  'image/png',
 };
 
 function serveFile(res, filePath) {
@@ -25,19 +26,23 @@ function serveFile(res, filePath) {
 }
 
 function proxyToAnthropic(req, res) {
-  var chunks = [], size = 0;
+  var chunks = [];
+  var size = 0;
+
   req.on('data', function(chunk) {
     size += chunk.length;
     if (size > MAX_BODY) {
       res.writeHead(413, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'PDF too large (max 50 MB).' } }));
-      req.destroy(); return;
+      req.destroy();
+      return;
     }
     chunks.push(chunk);
   });
+
   req.on('end', function() {
-    if (res.destroyed) return;
     var bodyStr = Buffer.concat(chunks).toString();
+
     var options = {
       hostname: 'api.anthropic.com',
       path:     '/v1/messages',
@@ -49,6 +54,7 @@ function proxyToAnthropic(req, res) {
         'Content-Length':    Buffer.byteLength(bodyStr),
       }
     };
+
     var apiReq = https.request(options, function(apiRes) {
       var resp = [];
       apiRes.on('data', function(c) { resp.push(c); });
@@ -60,29 +66,48 @@ function proxyToAnthropic(req, res) {
         res.end(Buffer.concat(resp).toString());
       });
     });
+
     apiReq.on('error', function(err) {
       res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Proxy error: ' + err.message } }));
     });
+
     apiReq.write(bodyStr);
     apiReq.end();
   });
 }
 
+// ── HTTP server ────────────────────────────────────────────────────────────
 http.createServer(function(req, res) {
+
+  // CORS preflight
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin':  '*',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     });
-    res.end(); return;
+    res.end();
+    return;
   }
+
+  // API proxy
   if (req.method === 'POST' && req.url === '/api/messages') {
-    proxyToAnthropic(req, res); return;
+    proxyToAnthropic(req, res);
+    return;
   }
+
+  // Static files
   var urlPath = (req.url === '/' || req.url === '') ? '/index.html' : req.url;
   serveFile(res, path.join(__dirname, urlPath));
+
 }).listen(PORT, function() {
-  console.log('Media Framing Risk Analyser running on port ' + PORT);
+  console.log('');
+  console.log('  ✓  Media Framing Risk Analyser is running');
+  console.log('');
+  console.log('     Open this in your browser:');
+  console.log('     → http://localhost:' + PORT);
+  console.log('');
+  console.log('     Press Ctrl+C to stop.');
+  console.log('');
 });
