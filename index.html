@@ -268,10 +268,10 @@ tr:hover td { background:var(--surf2); }
       <div class="u-icon">
         <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
       </div>
-      <h3>Drop your PDF here</h3>
+      <h3>Drop your PDF or TXT file here</h3>
       <p>or click to browse your files</p>
     </div>
-    <input type="file" id="fileInput" accept="application/pdf" style="display:none">
+    <input type="file" id="fileInput" accept="application/pdf,text/plain,.txt,.pdf" style="display:none">
     <div class="file-row" id="fileRow" style="display:none">
       <div class="f-thumb"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
       <div class="f-meta"><div class="nm" id="fname"></div><div class="sz" id="fsize"></div></div>
@@ -437,7 +437,7 @@ tr:hover td { background:var(--surf2); }
 </div><!-- /wrap -->
 
 <script>
-// API key is held securely on the server — no key needed here
+// API key is held securely on the server
 var PAPERS = ['El Mundo','La Razón','ABC','El País'];
 var COLORS = { 'El Mundo':'#F5A623', 'La Razón':'#7ED321', 'ABC':'#E05252', 'El País':'#4A90D9' };
 var CATS = [
@@ -453,6 +453,7 @@ var CATS = [
 ];
 var STORAGE_KEY = 'framing_risk_history_v2';
 var b64 = null;
+var fileIsTxt = false;
 
 // ── Storage ────────────────────────────────────────────────────────────────
 function loadHistory() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); } catch(e){ return []; } }
@@ -489,7 +490,7 @@ function onDragLeave()  { document.getElementById('dropzone').classList.remove('
 function onDrop(e) {
   e.preventDefault(); document.getElementById('dropzone').classList.remove('drag');
   var f = e.dataTransfer.files[0];
-  if (f && f.type==='application/pdf') handleFile(f); else showError('Please upload a PDF file.');
+  if (f && (f.type==='application/pdf' || f.type==='text/plain' || f.name.endsWith('.txt') || f.name.endsWith('.pdf'))) handleFile(f); else showError('Please upload a PDF or TXT file.');
 }
 function handleFile(f) {
   if (!f) return;
@@ -498,14 +499,30 @@ function handleFile(f) {
   document.getElementById('fsize').textContent = (f.size/1024/1024).toFixed(2)+' MB';
   document.getElementById('fileRow').style.display = 'flex';
   setDetectStatus('detecting');
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    b64 = e.target.result.split(',')[1];
-    checkReady();
-    autoDetect();
-  };
-  reader.onerror = function() { showError('Could not read file.'); };
-  reader.readAsDataURL(f);
+  var isTxt = f.type === 'text/plain' || f.name.endsWith('.txt');
+  if (isTxt) {
+    // For TXT files read as plain text and store directly
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      b64 = e.target.result; // store raw text
+      fileIsTxt = true;
+      checkReady();
+      autoDetectFromText(b64.slice(0, 2000));
+    };
+    reader.onerror = function() { showError('Could not read file.'); };
+    reader.readAsText(f);
+  } else {
+    // PDF — read as base64
+    fileIsTxt = false;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      b64 = e.target.result.split(',')[1];
+      checkReady();
+      autoDetect();
+    };
+    reader.onerror = function() { showError('Could not read file.'); };
+    reader.readAsDataURL(f);
+  }
 }
 function clearFile() {
   b64 = null;
@@ -514,6 +531,7 @@ function clearFile() {
   document.getElementById('detectStatus').style.display = 'none';
   document.getElementById('pubSelect').value = '';
   document.getElementById('pubDate').value = new Date().toISOString().slice(0,10);
+  fileIsTxt = false;
   checkReady();
 }
 function showError(m) { document.getElementById('errMsg').textContent=m; document.getElementById('errStrip').style.display='flex'; }
@@ -532,6 +550,29 @@ function autoDetect() {
     setDetectStatus('done'); checkReady();
   }).catch(function() { setDetectStatus('failed'); });
 }
+function autoDetectFromText(sample) {
+  var sys = 'You are a document metadata extractor. Read this text from a Spanish newspaper and identify:\n1. The newspaper name — must be exactly one of: "El Mundo", "La Razón", "ABC", "El País".\n2. The edition date in YYYY-MM-DD format.\nRespond ONLY with valid JSON: {"newspaper":"El País","date":"2024-03-15"}';
+  fetch('/api/messages', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:100,
+      system: sys,
+      messages:[{role:'user',content:[{type:'text',text:'Identify the newspaper name and edition date from this text:\n\n'+sample}]}]
+    })
+  })
+  .then(function(res){ return res.json(); })
+  .then(function(data){
+    if (!data.content||!data.content.length) throw new Error('no content');
+    var raw = data.content.filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('').replace(/```json|```/g,'').trim();
+    var meta = JSON.parse(raw);
+    if (meta.newspaper && PAPERS.indexOf(meta.newspaper)!==-1) document.getElementById('pubSelect').value = meta.newspaper;
+    if (meta.date && /^\d{4}-\d{2}-\d{2}$/.test(meta.date)) document.getElementById('pubDate').value = meta.date;
+    setDetectStatus('done'); checkReady();
+  }).catch(function(){ setDetectStatus('failed'); });
+}
+
 function setDetectStatus(state) {
   var el = document.getElementById('detectStatus');
   if (state==='detecting') { el.style.display='flex'; el.innerHTML='<span class="det-spinner"></span><span>Detecting newspaper and date…</span>'; }
@@ -541,6 +582,17 @@ function setDetectStatus(state) {
 
 // ── API helper ─────────────────────────────────────────────────────────────
 function callAPI(sys, userText, maxTokens) {
+  var messages;
+  if (fileIsTxt) {
+    // TXT: send content as plain text (capped at 60,000 chars)
+    messages = [{role:'user',content:[{type:'text',text:userText+'\n\n'+b64.slice(0,60000)}]}];
+  } else {
+    // PDF: send as native base64 document block
+    messages = [{role:'user',content:[
+      {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
+      {type:'text',text:userText}
+    ]}];
+  }
   return fetch('/api/messages', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -548,10 +600,7 @@ function callAPI(sys, userText, maxTokens) {
       model:'claude-sonnet-4-6',
       max_tokens: maxTokens,
       system: sys,
-      messages:[{role:'user',content:[
-        {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
-        {type:'text',text:userText}
-      ]}]
+      messages: messages
     })
   })
   .then(function(res) {
