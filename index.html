@@ -225,6 +225,21 @@ tr:hover td { background:var(--surf2); }
 .dl-info p  { font-size:13px;color:var(--muted); }
 .dl-btn { padding:8px 18px;border:1px solid var(--p600);border-radius:var(--rmd);background:var(--p50);color:var(--p400);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;transition:background .12s; }
 .dl-btn:hover { background:var(--p600);color:#fff; }
+
+/* ── File queue ── */
+.queue-item { display:flex;align-items:center;gap:10px;background:var(--surf2);border:1px solid var(--border);border-radius:var(--rmd);padding:10px 14px;margin-top:8px; }
+.queue-thumb { width:32px;height:32px;background:var(--p50);border-radius:var(--rsm);display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.queue-thumb svg { width:16px;height:16px;stroke:var(--p400);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round; }
+.queue-info { flex:1;min-width:0; }
+.queue-name { font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text); }
+.queue-meta { font-size:11px;color:var(--faint);margin-top:1px; }
+.queue-status { font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;flex-shrink:0; }
+.queue-status.pending  { background:var(--surf3);color:var(--faint); }
+.queue-status.running  { background:var(--p50);color:var(--p400); }
+.queue-status.done     { background:#0D2B0E;color:#4CAF50; }
+.queue-status.error    { background:var(--red-bg);color:var(--red); }
+.queue-rm { background:none;border:none;cursor:pointer;color:var(--faint);font-size:16px;padding:0 2px;line-height:1;flex-shrink:0; }
+.queue-rm:hover { color:var(--red); }
 </style>
 </head>
 <body>
@@ -260,7 +275,7 @@ tr:hover td { background:var(--surf2); }
   <div class="card">
     <div class="clabel">
       <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Upload newspaper PDF
+      Upload newspaper files
     </div>
     <div class="upload-zone" id="dropzone"
       onclick="document.getElementById('fileInput').click()"
@@ -268,37 +283,17 @@ tr:hover td { background:var(--surf2); }
       <div class="u-icon">
         <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
       </div>
-      <h3>Drop your PDF or TXT file here</h3>
-      <p>or click to browse your files</p>
+      <h3>Drop files here</h3>
+      <p>PDF or TXT · multiple files supported · name format: <strong>Newspaper_YYYY-MM-DD</strong></p>
     </div>
-    <input type="file" id="fileInput" accept="application/pdf,text/plain,.txt,.pdf" style="display:none">
-    <div class="file-row" id="fileRow" style="display:none">
-      <div class="f-thumb"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
-      <div class="f-meta"><div class="nm" id="fname"></div><div class="sz" id="fsize"></div></div>
-      <button class="rm-btn" onclick="clearFile()">Remove</button>
-    </div>
-    <div class="detect-strip" id="detectStatus"></div>
-    <div class="row2">
-      <div class="field">
-        <label for="pubSelect">Newspaper</label>
-        <select id="pubSelect">
-          <option value="">— Select —</option>
-          <option value="El Mundo">El Mundo</option>
-          <option value="La Razón">La Razón</option>
-          <option value="ABC">ABC</option>
-          <option value="El País">El País</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="pubDate">Edition date</label>
-        <input type="date" id="pubDate">
-      </div>
-    </div>
+    <input type="file" id="fileInput" accept="application/pdf,text/plain,.txt,.pdf" multiple style="display:none">
+    <!-- File queue -->
+    <div id="fileQueue" style="margin-top:10px"></div>
   </div>
 
   <button class="abtn" id="analyseBtn" disabled>
     <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    Analyse for framing risk
+    <span id="analyseBtnLabel">Analyse files</span>
   </button>
 
   <div class="err-strip" id="errStrip">
@@ -459,14 +454,16 @@ var fileIsTxt = false;
 function loadHistory() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); } catch(e){ return []; } }
 function saveHistory(h) { localStorage.setItem(STORAGE_KEY, JSON.stringify(h)); }
 
+// ── Queue state ────────────────────────────────────────────────────────────
+var fileQueue = [];   // [{id, file, name, newspaper, date, isTxt, data, status}]
+var isProcessing = false;
+
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
-  document.getElementById('pubDate').value = new Date().toISOString().slice(0,10);
-  document.getElementById('pubSelect').addEventListener('change', checkReady);
-  document.getElementById('pubDate').addEventListener('change', checkReady);
-  document.getElementById('analyseBtn').addEventListener('click', analyse);
+  document.getElementById('analyseBtn').addEventListener('click', runQueue);
   document.getElementById('fileInput').addEventListener('change', function() {
-    if (this.files && this.files[0]) handleFile(this.files[0]);
+    addFilesToQueue(Array.from(this.files));
+    this.value = '';
   });
   renderAll();
 });
@@ -478,130 +475,117 @@ function switchTab(name, btn) {
   document.getElementById('tab-'+name).classList.add('active');
 }
 
-function checkReady() {
-  var pub = document.getElementById('pubSelect').value;
-  var dt  = document.getElementById('pubDate').value;
-  document.getElementById('analyseBtn').disabled = !(b64 && pub && dt);
+// ── Filename parser ────────────────────────────────────────────────────────
+// Expects patterns like: ElPais_2026-07-04.pdf  /  El Mundo_2026-05-19.txt
+// or: 2026-07-04_ABC.pdf  or  ABC_04-07-2026.pdf etc.
+function parseFilename(name) {
+  var stem = name.replace(/\.(pdf|txt)$/i, '');
+  // Try to find date in YYYY-MM-DD
+  var dateMatch = stem.match(/(\d{4}-\d{2}-\d{2})/);
+  // Also try DD-MM-YYYY or DD/MM/YYYY
+  if (!dateMatch) {
+    var dmyMatch = stem.match(/(\d{2})[\-\/](\d{2})[\-\/](\d{4})/);
+    if (dmyMatch) dateMatch = [null, dmyMatch[3]+'-'+dmyMatch[2]+'-'+dmyMatch[1]];
+  }
+  var date = dateMatch ? dateMatch[1] : new Date().toISOString().slice(0,10);
+
+  // Try to find newspaper name
+  var newspaper = '';
+  var stemLower = stem.toLowerCase().replace(/[_\-\.]/g,' ');
+  if (stemLower.indexOf('el pais') !== -1 || stemLower.indexOf('elpais') !== -1) newspaper = 'El País';
+  else if (stemLower.indexOf('el mundo') !== -1 || stemLower.indexOf('elmundo') !== -1) newspaper = 'El Mundo';
+  else if (stemLower.indexOf('la razon') !== -1 || stemLower.indexOf('larazon') !== -1 || stemLower.indexOf('razón') !== -1 || stemLower.indexOf('razon') !== -1) newspaper = 'La Razón';
+  else if (stemLower.indexOf('abc') !== -1) newspaper = 'ABC';
+
+  return { newspaper: newspaper, date: date };
 }
 
-// ── File handling ──────────────────────────────────────────────────────────
-function onDragOver(e) { e.preventDefault(); document.getElementById('dropzone').classList.add('drag'); }
-function onDragLeave()  { document.getElementById('dropzone').classList.remove('drag'); }
-function onDrop(e) {
-  e.preventDefault(); document.getElementById('dropzone').classList.remove('drag');
-  var f = e.dataTransfer.files[0];
-  if (f && (f.type==='application/pdf' || f.type==='text/plain' || f.name.endsWith('.txt') || f.name.endsWith('.pdf'))) handleFile(f); else showError('Please upload a PDF or TXT file.');
-}
-function handleFile(f) {
-  if (!f) return;
+// ── Add files to queue ─────────────────────────────────────────────────────
+function addFilesToQueue(files) {
   hideError();
-  document.getElementById('fname').textContent = f.name;
-  document.getElementById('fsize').textContent = (f.size/1024/1024).toFixed(2)+' MB';
-  document.getElementById('fileRow').style.display = 'flex';
-  setDetectStatus('detecting');
-  var isTxt = f.type === 'text/plain' || f.name.endsWith('.txt');
-  if (isTxt) {
-    // For TXT files read as plain text and store directly
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      b64 = e.target.result; // store raw text
-      fileIsTxt = true;
-      checkReady();
-      autoDetectFromText(b64.slice(0, 2000));
-    };
-    reader.onerror = function() { showError('Could not read file.'); };
-    reader.readAsText(f);
-  } else {
-    // PDF — read as base64
-    fileIsTxt = false;
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      b64 = e.target.result.split(',')[1];
-      checkReady();
-      autoDetect();
-    };
-    reader.onerror = function() { showError('Could not read file.'); };
-    reader.readAsDataURL(f);
-  }
+  var added = 0;
+  files.forEach(function(f) {
+    var valid = f.type==='application/pdf' || f.type==='text/plain' || f.name.endsWith('.pdf') || f.name.endsWith('.txt');
+    if (!valid) return;
+    var meta = parseFilename(f.name);
+    var item = { id: Date.now() + Math.random(), file: f, name: f.name, size: f.size, newspaper: meta.newspaper, date: meta.date, isTxt: f.name.endsWith('.txt') || f.type==='text/plain', data: null, status: 'pending' };
+    fileQueue.push(item);
+    added++;
+  });
+  if (added === 0) { showError('No valid PDF or TXT files found.'); return; }
+  renderQueue();
+  updateAnalyseBtn();
 }
-function clearFile() {
-  b64 = null;
-  document.getElementById('fileInput').value = '';
-  document.getElementById('fileRow').style.display = 'none';
-  document.getElementById('detectStatus').style.display = 'none';
-  document.getElementById('pubSelect').value = '';
-  document.getElementById('pubDate').value = new Date().toISOString().slice(0,10);
-  fileIsTxt = false;
-  checkReady();
+
+function removeFromQueue(id) {
+  fileQueue = fileQueue.filter(function(i){ return i.id !== id; });
+  renderQueue();
+  updateAnalyseBtn();
 }
+
+function updateAnalyseBtn() {
+  var pending = fileQueue.filter(function(i){ return i.status==='pending'; });
+  var btn = document.getElementById('analyseBtn');
+  btn.disabled = pending.length === 0 || isProcessing;
+  document.getElementById('analyseBtnLabel').textContent = pending.length > 1
+    ? 'Analyse '+pending.length+' files'
+    : 'Analyse file';
+}
+
+function renderQueue() {
+  var container = document.getElementById('fileQueue');
+  container.innerHTML = '';
+  fileQueue.forEach(function(item) {
+    var statusClass = item.status;
+    var statusLabel = item.status === 'pending' ? 'Queued' : item.status === 'running' ? 'Analysing…' : item.status === 'done' ? 'Done' : 'Error';
+    var paperLabel = item.newspaper ? '<span style="color:'+paperColor(item.newspaper)+'">'+item.newspaper+'</span> · ' : '<span style="color:var(--amber)">⚠ newspaper not detected in filename</span> · ';
+    var div = document.createElement('div');
+    div.className = 'queue-item';
+    div.id = 'qi-'+item.id;
+    div.innerHTML =
+      '<div class="queue-thumb"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>'+
+      '<div class="queue-info">'+
+        '<div class="queue-name">'+item.name+'</div>'+
+        '<div class="queue-meta">'+paperLabel+formatDate(item.date)+' · '+(item.size/1024/1024).toFixed(2)+' MB</div>'+
+      '</div>'+
+      '<span class="queue-status '+statusClass+'">'+statusLabel+'</span>'+
+      (item.status==='pending' ? '<button class="queue-rm" onclick="removeFromQueue('+item.id+')" title="Remove">&#215;</button>' : '');
+    container.appendChild(div);
+  });
+}
+
+function setQueueItemStatus(id, status) {
+  fileQueue.forEach(function(i){ if(i.id===id) i.status=status; });
+  renderQueue();
+}
+
 function showError(m) { document.getElementById('errMsg').textContent=m; document.getElementById('errStrip').style.display='flex'; }
 function hideError()   { document.getElementById('errStrip').style.display='none'; }
 function setStatus(m)  { document.getElementById('statusMsg').textContent=m; }
 
-// ── Auto-detect ────────────────────────────────────────────────────────────
-function autoDetect() {
-  if (!b64) return;
-  var sys = 'You are a document metadata extractor. Read the first page of this Spanish newspaper PDF and identify:\n1. The newspaper name — must be exactly one of: "El Mundo", "La Razón", "ABC", "El País".\n2. The edition date in YYYY-MM-DD format.\nRespond ONLY with valid JSON: {"newspaper":"El País","date":"2024-03-15"}';
-  callAPI(sys, 'Identify the newspaper name and edition date from this Spanish newspaper PDF.', 100)
-  .then(function(raw) {
-    var meta = JSON.parse(raw);
-    if (meta.newspaper && PAPERS.indexOf(meta.newspaper)!==-1) document.getElementById('pubSelect').value = meta.newspaper;
-    if (meta.date && /^\d{4}-\d{2}-\d{2}$/.test(meta.date)) document.getElementById('pubDate').value = meta.date;
-    setDetectStatus('done'); checkReady();
-  }).catch(function() { setDetectStatus('failed'); });
-}
-function autoDetectFromText(sample) {
-  var sys = 'You are a document metadata extractor. Read this text from a Spanish newspaper and identify:\n1. The newspaper name — must be exactly one of: "El Mundo", "La Razón", "ABC", "El País".\n2. The edition date in YYYY-MM-DD format.\nRespond ONLY with valid JSON: {"newspaper":"El País","date":"2024-03-15"}';
-  fetch('/api/messages', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      model:'claude-sonnet-4-6',
-      max_tokens:100,
-      system: sys,
-      messages:[{role:'user',content:[{type:'text',text:'Identify the newspaper name and edition date from this text:\n\n'+sample}]}]
-    })
-  })
-  .then(function(res){ return res.json(); })
-  .then(function(data){
-    if (!data.content||!data.content.length) throw new Error('no content');
-    var raw = data.content.filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('').replace(/```json|```/g,'').trim();
-    var meta = JSON.parse(raw);
-    if (meta.newspaper && PAPERS.indexOf(meta.newspaper)!==-1) document.getElementById('pubSelect').value = meta.newspaper;
-    if (meta.date && /^\d{4}-\d{2}-\d{2}$/.test(meta.date)) document.getElementById('pubDate').value = meta.date;
-    setDetectStatus('done'); checkReady();
-  }).catch(function(){ setDetectStatus('failed'); });
-}
-
-function setDetectStatus(state) {
-  var el = document.getElementById('detectStatus');
-  if (state==='detecting') { el.style.display='flex'; el.innerHTML='<span class="det-spinner"></span><span>Detecting newspaper and date…</span>'; }
-  else if (state==='done')  { el.style.display='flex'; el.innerHTML='<span style="color:#4CAF50;font-size:14px">&#10003;</span><span>Detected — please confirm or adjust below</span>'; }
-  else { el.style.display='flex'; el.innerHTML='<span style="color:var(--faint)">&#8212;</span><span>Could not auto-detect — please select manually</span>'; }
+// ── Drag and drop ──────────────────────────────────────────────────────────
+function onDragOver(e) { e.preventDefault(); document.getElementById('dropzone').classList.add('drag'); }
+function onDragLeave()  { document.getElementById('dropzone').classList.remove('drag'); }
+function onDrop(e) {
+  e.preventDefault(); document.getElementById('dropzone').classList.remove('drag');
+  addFilesToQueue(Array.from(e.dataTransfer.files));
 }
 
 // ── API helper ─────────────────────────────────────────────────────────────
-function callAPI(sys, userText, maxTokens) {
+function callAPIWithItem(item, sys, userText, maxTokens) {
   var messages;
-  if (fileIsTxt) {
-    // TXT: send content as plain text (capped at 60,000 chars)
-    messages = [{role:'user',content:[{type:'text',text:userText+'\n\n'+b64.slice(0,60000)}]}];
+  if (item.isTxt) {
+    messages = [{role:'user',content:[{type:'text',text:userText+'\n\n'+item.data.slice(0,60000)}]}];
   } else {
-    // PDF: send as native base64 document block
     messages = [{role:'user',content:[
-      {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
+      {type:'document',source:{type:'base64',media_type:'application/pdf',data:item.data}},
       {type:'text',text:userText}
     ]}];
   }
   return fetch('/api/messages', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      model:'claude-sonnet-4-6',
-      max_tokens: maxTokens,
-      system: sys,
-      messages: messages
-    })
+    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:maxTokens, system:sys, messages:messages })
   })
   .then(function(res) {
     if (!res.ok) return res.json().then(function(e){ throw new Error(e.error?e.error.message:'HTTP '+res.status); });
@@ -613,35 +597,76 @@ function callAPI(sys, userText, maxTokens) {
   });
 }
 
-// ── Analyse ────────────────────────────────────────────────────────────────
-function analyse() {
-  var pub = document.getElementById('pubSelect').value;
-  var dt  = document.getElementById('pubDate').value;
-  if (!b64||!pub||!dt) return;
+// ── Analyse queue ──────────────────────────────────────────────────────────
+var SYS_PROMPT = 'You are an expert media analyst applying the IHRA-informed Framing Risk Score (FRS) methodology.\n\nFRS = (CB*0.20)+(CT*0.20)+(HI*0.15)+(D*0.10)+(DSD*0.10)+(DS*0.10)+(DH*0.05)+(AE*0.05)+(CO*0.05)\nEach category score is 0-5. FRS is already on the 0-5 scale.\n\nCB=Collective Blame, CT=Conspiracy Tropes, HI=Holocaust Inversion, D=Demonisation, DSD=Denial of Jewish Self-Determination, DS=Double Standards, DH=Dehumanisation, AE=Asymmetric Empathy, CO=Contextual Omission.\n\nScore: 0=none,1=minimal,2=occasional,3=moderate,4=significant,5=pervasive\nConfidence: High=explicit+repeated, Medium=strong pattern, Low=isolated\n\nRespond ONLY with valid JSON:\n{"scores":{"CB":0,"CT":0,"HI":0,"D":0,"DSD":0,"DS":0,"DH":0,"AE":0,"CO":0},"frs":0.0,"confidence":"Medium","evidence":"2-4 sentence evidence summary.","main_drivers":"Detailed narrative explaining what drove the score, citing specific headlines, language and framing patterns observed."}';
+
+function readFileData(item) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    if (item.isTxt) {
+      reader.onload = function(e) { item.data = e.target.result; resolve(); };
+      reader.onerror = reject;
+      reader.readAsText(item.file);
+    } else {
+      reader.onload = function(e) { item.data = e.target.result.split(',')[1]; resolve(); };
+      reader.onerror = reject;
+      reader.readAsDataURL(item.file);
+    }
+  });
+}
+
+function runQueue() {
+  var pending = fileQueue.filter(function(i){ return i.status==='pending'; });
+  if (!pending.length || isProcessing) return;
+  isProcessing = true;
   hideError();
   document.getElementById('analyseBtn').disabled = true;
   document.getElementById('resultsSec').style.display = 'none';
   document.getElementById('spinArea').style.display = 'block';
-  setStatus('Sending document to analysis engine…');
 
-  var sys = 'You are an expert media analyst applying the IHRA-informed Framing Risk Score (FRS) methodology.\n\nFRS = (CB*0.20)+(CT*0.20)+(HI*0.15)+(D*0.10)+(DSD*0.10)+(DS*0.10)+(DH*0.05)+(AE*0.05)+(CO*0.05)\nEach category score is 0-5. FRS is already on the 0-5 scale.\n\nCB=Collective Blame, CT=Conspiracy Tropes, HI=Holocaust Inversion, D=Demonisation, DSD=Denial of Jewish Self-Determination, DS=Double Standards, DH=Dehumanisation, AE=Asymmetric Empathy, CO=Contextual Omission.\n\nScore: 0=none,1=minimal,2=occasional,3=moderate,4=significant,5=pervasive\nConfidence: High=explicit+repeated, Medium=strong pattern, Low=isolated\n\nRespond ONLY with valid JSON:\n{"scores":{"CB":0,"CT":0,"HI":0,"D":0,"DSD":0,"DS":0,"DH":0,"AE":0,"CO":0},"frs":0.0,"confidence":"Medium","evidence":"2-4 sentence evidence summary.","main_drivers":"Detailed narrative explaining what drove the score, citing specific headlines, language and framing patterns observed."}';
+  // Process files one by one in sequence
+  function processNext(idx) {
+    if (idx >= pending.length) {
+      // All done
+      isProcessing = false;
+      document.getElementById('spinArea').style.display = 'none';
+      updateAnalyseBtn();
+      renderAll();
+      return;
+    }
+    var item = pending[idx];
+    setStatus('Analysing '+item.name+' ('+( idx+1)+' of '+pending.length+')…');
+    setQueueItemStatus(item.id, 'running');
 
-  setStatus('Analysing document content…');
-  callAPI(sys, 'Analyse this Spanish newspaper PDF for antisemitic framing and return the JSON assessment.', 1200)
-  .then(function(raw) {
-    var result;
-    try { result = JSON.parse(raw); } catch(e) { throw new Error('Could not parse analysis response.'); }
-    var frs = (typeof result.frs==='number'&&!isNaN(result.frs)) ? result.frs : CATS.reduce(function(a,c){return a+(result.scores[c.key]||0)*c.w;},0);
-    var entry = { id:Date.now(), date:dt, newspaper:pub, frs:parseFloat(frs.toFixed(2)), confidence:result.confidence||'Medium', evidence:result.evidence||'', main_drivers:result.main_drivers||result.evidence||'', scores:result.scores, notes:'' };
-    var h = loadHistory(); h.push(entry); saveHistory(h);
-    showResult(result, pub, dt);
-    renderAll();
-  })
-  .catch(function(err) {
-    document.getElementById('spinArea').style.display = 'none';
-    document.getElementById('analyseBtn').disabled = false;
-    showError('Analysis failed: '+err.message);
-  });
+    if (!item.newspaper) {
+      setQueueItemStatus(item.id, 'error');
+      showError(item.name+': newspaper not found in filename. Rename as e.g. ElPais_2026-07-04.pdf');
+      processNext(idx + 1);
+      return;
+    }
+
+    readFileData(item)
+    .then(function() {
+      return callAPIWithItem(item, SYS_PROMPT, 'Analyse this newspaper content for antisemitic framing and return the JSON assessment.', 1200);
+    })
+    .then(function(raw) {
+      var result;
+      try { result = JSON.parse(raw); } catch(e) { throw new Error('Could not parse response'); }
+      var frs = (typeof result.frs==='number'&&!isNaN(result.frs)) ? result.frs : CATS.reduce(function(a,c){return a+(result.scores[c.key]||0)*c.w;},0);
+      var entry = { id:Date.now()+idx, date:item.date, newspaper:item.newspaper, frs:parseFloat(frs.toFixed(2)), confidence:result.confidence||'Medium', evidence:result.evidence||'', main_drivers:result.main_drivers||result.evidence||'', scores:result.scores, notes:'' };
+      var h = loadHistory(); h.push(entry); saveHistory(h);
+      setQueueItemStatus(item.id, 'done');
+      // Show last result
+      if (idx === pending.length - 1) showResult(result, item.newspaper, item.date);
+      processNext(idx + 1);
+    })
+    .catch(function(err) {
+      setQueueItemStatus(item.id, 'error');
+      showError('Failed: '+item.name+' — '+err.message);
+      processNext(idx + 1);
+    });
+  }
+  processNext(0);
 }
 
 // ── Show result ────────────────────────────────────────────────────────────
@@ -682,7 +707,9 @@ function showResult(r, pub, dt) {
 }
 
 function resetTool() {
-  clearFile();
+  fileQueue = [];
+  renderQueue();
+  updateAnalyseBtn();
   document.getElementById('resultsSec').style.display='none';
   document.getElementById('spinArea').style.display='none';
   document.getElementById('analystNotes').value='';
