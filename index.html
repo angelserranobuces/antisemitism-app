@@ -358,17 +358,17 @@ tr:hover td { background:var(--surf2); }
     <div class="np-grid" id="npGrid"></div>
   </div>
 
-  <!-- Tabs: Summary · Score Matrix · Ranking · Evidence · Downloads -->
+  <!-- Tabs -->
   <div class="divider"></div>
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('summary',this)">Summary</button>
-    <button class="tab-btn" onclick="switchTab('matrix',this)">Score Matrix</button>
-    <button class="tab-btn" onclick="switchTab('ranking',this)">Ranking</button>
-    <button class="tab-btn" onclick="switchTab('evidence',this)">Evidence</button>
+  <div class="tabs" style="flex-wrap:wrap;gap:4px">
+    <button class="tab-btn active" onclick="switchTab('summary',this)">1. Historical Trend</button>
+    <button class="tab-btn" onclick="switchTab('pillars',this)">2. Pillar Contributions</button>
+    <button class="tab-btn" onclick="switchTab('ranking',this)">3. Risk Ranking</button>
+    <button class="tab-btn" onclick="switchTab('words',this)">4. Word Analysis</button>
     <button class="tab-btn" onclick="switchTab('downloads',this)">Downloads</button>
   </div>
 
-  <!-- Summary tab -->
+  <!-- Tab 1: Historical Trend -->
   <div class="tab-panel active" id="tab-summary">
     <div class="legend" id="legend"></div>
     <div class="chart-wrap">
@@ -385,30 +385,70 @@ tr:hover td { background:var(--surf2); }
     </div>
   </div>
 
-  <!-- Score Matrix tab -->
-  <div class="tab-panel" id="tab-matrix">
-    <div class="card">
-      <div class="clabel">&#9638; Category Score Matrix</div>
+  <!-- Tab 2: Pillar Contributions -->
+  <div class="tab-panel" id="tab-pillars">
+    <p style="font-size:13px;color:var(--muted);margin-bottom:1.25rem">Rating contribution of each of the 9 IHRA pillars across all analysed editions, weighted by their FRS multiplier.</p>
+    <div class="card" style="margin-bottom:1rem">
+      <div class="clabel">&#9638; Pillar Score Matrix — all editions</div>
       <div class="matrix-wrap">
-        <table class="matrix-table" id="matrixTable">
+        <table class="matrix-table">
           <thead id="matrixHead"></thead>
           <tbody id="matrixBody"></tbody>
         </table>
         <div class="empty-state" id="emptyMatrix">No analyses recorded yet.</div>
       </div>
     </div>
+    <div class="card">
+      <div class="clabel">&#9651; Weighted contribution per pillar (average across all editions)</div>
+      <div id="pillarBars"></div>
+      <div class="empty-state" id="emptyPillarBars" style="display:none">No analyses recorded yet.</div>
+    </div>
   </div>
 
-  <!-- Ranking tab -->
+  <!-- Tab 3: Risk Ranking -->
   <div class="tab-panel" id="tab-ranking">
+    <p style="font-size:13px;color:var(--muted);margin-bottom:1.25rem">All editions ranked from highest to lowest Framing Risk Score, with main drivers narrative.</p>
     <div id="rankingList"></div>
     <div class="empty-state" id="emptyRanking">No analyses recorded yet.</div>
   </div>
 
-  <!-- Evidence tab -->
-  <div class="tab-panel" id="tab-evidence">
-    <div id="evidenceList"></div>
-    <div class="empty-state" id="emptyEvidence">No analyses recorded yet.</div>
+  <!-- Tab 4: Word Analysis -->
+  <div class="tab-panel" id="tab-words">
+    <p style="font-size:13px;color:var(--muted);margin-bottom:1.25rem">Count of antisemitic indicator words (negative) and neutral/positive Jewish-context words detected across all analysed editions.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+      <!-- Negative words -->
+      <div class="card">
+        <div class="clabel" style="color:var(--red)">&#9888; Antisemitic indicator words</div>
+        <p style="font-size:11px;color:var(--faint);margin-bottom:12px">From subtle to explicit — presence counted per edition</p>
+        <div id="negWordBars"></div>
+        <div class="empty-state" id="emptyNegWords" style="display:none">No analyses recorded yet.</div>
+      </div>
+      <!-- Positive words -->
+      <div class="card">
+        <div class="clabel" style="color:#4CAF50">&#10003; Neutral / contextual words</div>
+        <p style="font-size:11px;color:var(--faint);margin-bottom:12px">Jewish-context terms that do not indicate antisemitism by themselves</p>
+        <div id="posWordBars"></div>
+        <div class="empty-state" id="emptyPosWords" style="display:none">No analyses recorded yet.</div>
+      </div>
+    </div>
+
+    <!-- Per-edition word table -->
+    <div class="card">
+      <div class="clabel">Word counts by edition</div>
+      <div style="overflow-x:auto">
+        <table class="matrix-table" style="min-width:500px">
+          <thead><tr>
+            <th style="text-align:left">Edition</th>
+            <th style="text-align:center;color:var(--red)">Negative words</th>
+            <th style="text-align:center;color:#4CAF50">Positive words</th>
+            <th style="text-align:center">Ratio</th>
+          </tr></thead>
+          <tbody id="wordTableBody"></tbody>
+        </table>
+        <div class="empty-state" id="emptyWordTable">No analyses recorded yet.</div>
+      </div>
+    </div>
   </div>
 
   <!-- Downloads tab -->
@@ -423,7 +463,7 @@ tr:hover td { background:var(--surf2); }
     <div class="dl-card">
       <div class="dl-info">
         <h4>Export as JSON</h4>
-        <p>Full dataset including evidence summaries and all category scores</p>
+        <p>Full dataset including evidence summaries, word counts and all category scores</p>
       </div>
       <button class="dl-btn" onclick="downloadJSON()">Download JSON</button>
     </div>
@@ -757,6 +797,153 @@ function resetTool() {
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
+
+// ── Word lists ─────────────────────────────────────────────────────────────
+var NEG_WORDS = [
+  { label: 'Lobby judío / lobby proisraelí', terms: ['lobby judío','lobby proisraelí','lobby israelí','lobby pro-israelí'] },
+  { label: 'Doble lealtad', terms: ['doble lealtad','lealtad a israel','lealtad judía'] },
+  { label: 'Mención innecesaria del origen judío', terms: ['el judío','banquero judío','empresario judío','financiero judío','magnate judío'] },
+  { label: 'El poder judío (banca/medios/Hollywood)', terms: ['poder judío','poder israelí','poder sionista','controlan los medios','controlan hollywood','controlan la banca'] },
+  { label: 'Financiado por Soros / mano de Soros', terms: ['financiado por soros','mano de soros','soros financia','dinero de soros','fondos de soros'] },
+  { label: 'Doble rasero exclusivo con Israel', terms: ['único país al que','solo a israel','estándar doble','dos raseros','doble rasero'] },
+  { label: 'Comparaciones con el nazismo', terms: ['nuevos nazis','nazis israelíes','genocidio judío','holocausto palestino','como hitler','igual que los nazis','apartheid israelí'] },
+  { label: 'Negar autodeterminación judía', terms: ['israel no debería existir','israel es ilegítimo','estado ilegítimo','eliminar israel','destruir israel'] },
+  { label: 'Responsabilidad colectiva', terms: ['los judíos deberían','la comunidad judía calla','los judíos callan','judíos responsables','judíos colectivamente'] },
+  { label: 'Tropos económicos / Protocolos', terms: ['usura judía','controlan el mundo','protocolos de sión','protocolos de los sabios','elites judías','oligarquía judía'] },
+];
+var POS_WORDS = [
+  { label: 'Judío / judía', terms: ['judío','judía','judíos','judías'] },
+  { label: 'Israel / israelí', terms: ['israel','israelí','israelíes'] },
+  { label: 'Sionismo / sionista', terms: ['sionismo','sionista','sionistas'] },
+  { label: 'Semita / semítico', terms: ['semita','semítico','semítica','antisemita','antisemitismo'] },
+  { label: 'Hebreo', terms: ['hebreo','hebrea','hebreos'] },
+  { label: 'Sinagoga / rabino', terms: ['sinagoga','rabino','rabinos','sinagogal'] },
+  { label: 'Torá / Talmud', terms: ['torá','talmud','tóra'] },
+  { label: 'Kosher / cashér', terms: ['kosher','cashér','casher'] },
+  { label: 'Holocausto / Shoá', terms: ['holocausto','shoá','shoah','campos de concentración','auschwitz'] },
+  { label: 'Sefardí / sefardita', terms: ['sefardí','sefardita','sefardíes','sefarditas'] },
+];
+
+function countWordsInText(text, terms) {
+  if (!text) return 0;
+  var t = text.toLowerCase();
+  var count = 0;
+  terms.forEach(function(term) {
+    var idx = 0;
+    while ((idx = t.indexOf(term.toLowerCase(), idx)) !== -1) { count++; idx += term.length; }
+  });
+  return count;
+}
+
+function computeWordCounts(entry) {
+  // Use evidence + main_drivers as proxy for article text
+  var text = (entry.evidence || '') + ' ' + (entry.main_drivers || '');
+  var neg = 0, pos = 0;
+  var negDetail = [], posDetail = [];
+  NEG_WORDS.forEach(function(w) {
+    var c = countWordsInText(text, w.terms);
+    neg += c; negDetail.push({ label: w.label, count: c });
+  });
+  POS_WORDS.forEach(function(w) {
+    var c = countWordsInText(text, w.terms);
+    pos += c; posDetail.push({ label: w.label, count: c });
+  });
+  return { neg: neg, pos: pos, negDetail: negDetail, posDetail: posDetail };
+}
+
+// ── Render pillar bars ─────────────────────────────────────────────────────
+function renderPillarBars(h) {
+  var el = document.getElementById('pillarBars');
+  var empty = document.getElementById('emptyPillarBars');
+  el.innerHTML = '';
+  if (!h.length) { empty.style.display='block'; return; }
+  empty.style.display='none';
+  // Compute average weighted contribution per pillar
+  var totals = {};
+  CATS.forEach(function(c){ totals[c.key]=0; });
+  h.forEach(function(e){
+    CATS.forEach(function(c){
+      var s = e.scores&&typeof e.scores[c.key]==='number'?e.scores[c.key]:0;
+      totals[c.key] += s * c.w;
+    });
+  });
+  var maxVal = 0;
+  CATS.forEach(function(c){ if(totals[c.key]/h.length > maxVal) maxVal = totals[c.key]/h.length; });
+  CATS.forEach(function(c){
+    var avg = totals[c.key]/h.length;
+    var pct = maxVal > 0 ? Math.round(avg/maxVal*100) : 0;
+    var col = avg < 0.1*c.w*5 ? '#4CAF50' : avg < 0.4*c.w*5 ? '#FFC107' : '#EF5350';
+    var div = document.createElement('div');
+    div.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)';
+    div.innerHTML =
+      '<span style="font-size:12px;color:var(--muted);flex:0 0 220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+c.label+
+        ' <span style="color:var(--faint);font-size:10px">(×'+(c.w*100).toFixed(0)+'%)</span></span>'+
+      '<div style="flex:1;height:8px;background:var(--surf3);border-radius:4px;overflow:hidden">'+
+        '<div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:4px;transition:width .6s"></div></div>'+
+      '<span style="font-size:12px;font-weight:600;color:'+col+';min-width:36px;text-align:right">'+avg.toFixed(3)+'</span>';
+    el.appendChild(div);
+  });
+}
+
+// ── Render word bars ───────────────────────────────────────────────────────
+function renderWordBars(h) {
+  var negEl=document.getElementById('negWordBars');
+  var posEl=document.getElementById('posWordBars');
+  var emptyNeg=document.getElementById('emptyNegWords');
+  var emptyPos=document.getElementById('emptyPosWords');
+  var tblBody=document.getElementById('wordTableBody');
+  var emptyTbl=document.getElementById('emptyWordTable');
+  negEl.innerHTML=''; posEl.innerHTML=''; tblBody.innerHTML='';
+
+  if (!h.length) {
+    emptyNeg.style.display='block'; emptyPos.style.display='block'; emptyTbl.style.display='block'; return;
+  }
+  emptyNeg.style.display='none'; emptyPos.style.display='none'; emptyTbl.style.display='none';
+
+  // Aggregate across all editions
+  var negTotals={}, posTotals={};
+  NEG_WORDS.forEach(function(w){ negTotals[w.label]=0; });
+  POS_WORDS.forEach(function(w){ posTotals[w.label]=0; });
+
+  h.forEach(function(e) {
+    var wc = computeWordCounts(e);
+    wc.negDetail.forEach(function(d){ negTotals[d.label]+=d.count; });
+    wc.posDetail.forEach(function(d){ posTotals[d.label]+=d.count; });
+  });
+
+  function renderBars(container, data, color) {
+    var maxV = Math.max.apply(null, data.map(function(d){return d.v;})) || 1;
+    data.forEach(function(d) {
+      var pct = Math.round(d.v/maxV*100);
+      var div=document.createElement('div');
+      div.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)';
+      div.innerHTML=
+        '<span style="font-size:11px;color:var(--muted);flex:0 0 200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+d.label+'">'+d.label+'</span>'+
+        '<div style="flex:1;height:6px;background:var(--surf3);border-radius:3px;overflow:hidden">'+
+          '<div style="width:'+pct+'%;height:100%;background:'+color+';border-radius:3px"></div></div>'+
+        '<span style="font-size:11px;font-weight:600;color:'+color+';min-width:24px;text-align:right">'+d.v+'</span>';
+      container.appendChild(div);
+    });
+  }
+
+  renderBars(negEl, NEG_WORDS.map(function(w){return{label:w.label,v:negTotals[w.label]};}), '#EF5350');
+  renderBars(posEl, POS_WORDS.map(function(w){return{label:w.label,v:posTotals[w.label]};}), '#4CAF50');
+
+  // Per-edition table
+  h.slice().sort(function(a,b){return b.frs-a.frs;}).forEach(function(e) {
+    var wc=computeWordCounts(e);
+    var ratio = wc.pos>0 ? (wc.neg/wc.pos).toFixed(2) : wc.neg>0?'∞':'—';
+    var col=paperColor(e.newspaper);
+    var tr=document.createElement('tr');
+    tr.innerHTML=
+      '<td><span class="np-badge-sm" style="background:'+col+'22;color:'+col+'">'+e.newspaper+'</span> '+formatDate(e.date)+'</td>'+
+      '<td style="text-align:center;color:var(--red);font-weight:600">'+wc.neg+'</td>'+
+      '<td style="text-align:center;color:#4CAF50;font-weight:600">'+wc.pos+'</td>'+
+      '<td style="text-align:center;color:var(--faint)">'+ratio+'</td>';
+    tblBody.appendChild(tr);
+  });
+}
+
 // ── Render all views ───────────────────────────────────────────────────────
 function renderAll() {
   var h = loadHistory();
@@ -766,8 +953,10 @@ function renderAll() {
   renderChart(h);
   renderTable(h);
   renderMatrix(h);
+  renderPillarBars(h);
   renderRanking(h);
   renderEvidence(h);
+  renderWordBars(h);
 }
 
 // ── Cards ──────────────────────────────────────────────────────────────────
