@@ -370,6 +370,20 @@ tr:hover td { background:var(--surf2); }
 
   <!-- Tab 1: Historical Trend -->
   <div class="tab-panel active" id="tab-summary">
+
+    <!-- Comparison report selector -->
+    <div class="card" style="margin-bottom:1rem;background:var(--surf2)">
+      <div class="clabel">&#128196; Generate comparison report for a selected date</div>
+      <p style="font-size:12px;color:var(--faint);margin-bottom:12px">Select a date to download a side-by-side comparison of all newspapers analysed on that date.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select id="compDateSelect" style="flex:1;min-width:160px;max-width:240px">
+          <option value="">— Select date —</option>
+        </select>
+        <button class="dl-btn" onclick="downloadComparisonReport()" style="flex-shrink:0">Download report</button>
+      </div>
+      <div id="compStatus" style="font-size:12px;color:var(--faint);margin-top:8px;display:none"></div>
+    </div>
+
     <div class="legend" id="legend"></div>
     <div class="chart-wrap">
       <div class="chart-title">&#128200; Historical Trend — Overall Risk Rating</div>
@@ -721,7 +735,7 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
 }
 
 // ── Analyse queue ──────────────────────────────────────────────────────────
-var SYS_PROMPT = 'You are an expert media analyst applying the IHRA-informed Framing Risk Score (FRS) methodology.\n\nFRS = (CB*0.20)+(CT*0.20)+(HI*0.15)+(D*0.10)+(DSD*0.10)+(DS*0.10)+(DH*0.05)+(AE*0.05)+(CO*0.05)\nEach category score is 0-5. FRS is already on the 0-5 scale.\n\nCB=Collective Blame, CT=Conspiracy Tropes, HI=Holocaust Inversion, D=Demonisation, DSD=Denial of Jewish Self-Determination, DS=Double Standards, DH=Dehumanisation, AE=Asymmetric Empathy, CO=Contextual Omission.\n\nScore: 0=none,1=minimal,2=occasional,3=moderate,4=significant,5=pervasive\nConfidence: High=explicit+repeated, Medium=strong pattern, Low=isolated\n\nRespond ONLY with valid JSON:\n{"scores":{"CB":0,"CT":0,"HI":0,"D":0,"DSD":0,"DS":0,"DH":0,"AE":0,"CO":0},"frs":0.0,"confidence":"Medium","evidence":"2-4 sentence evidence summary.","main_drivers":"Detailed narrative explaining what drove the score, citing specific headlines, language and framing patterns observed."}';
+var SYS_PROMPT = 'You are an expert IHRA-trained media analyst assessing antisemitic framing risk in Spanish newspaper editions. Apply the Framing Risk Score (FRS) methodology rigorously and do NOT default to zero scores — read carefully for subtle framing patterns.\n\nFRS = (CB*0.20)+(CT*0.20)+(HI*0.15)+(D*0.10)+(DSD*0.10)+(DS*0.10)+(DH*0.05)+(AE*0.05)+(CO*0.05)\nAll category scores are 0-5. The FRS result is already on the 0-5 scale.\n\nCATEGORIES AND WHAT TO LOOK FOR:\nCB (Collective Blame, 20%): Attributing actions of Israeli government/military to all Jews globally. Phrases like "los judíos" doing X, holding Jewish communities responsible for Israeli policy.\nCT (Conspiracy Tropes, 20%): Hidden Jewish/Israeli control narratives, dual loyalty accusations, lobby framing as hidden coordination ("el lobby judío", "la mano de Soros", "poder judío").\nHI (Holocaust Inversion, 15%): Comparing Israel to Nazi Germany, calling Gaza a "genocide" in ways that invert perpetrator/victim, "nuevos nazis", apartheid comparisons that erase historical context.\nD (Demonisation, 10%): Framing Israel/Jews as uniquely evil, morally exceptional, satanic or monstrous. Language like "masacre israelí", "guerra de conquista", "franquicias terroristas" applied to Israel.\nDSD (Denial of Self-Determination, 10%): Framing Israel\'s existence as uniquely illegitimate, "asentamientos ilegales" framed as making the state itself illegitimate rather than policy critique.\nDS (Double Standards, 10%): Applying norms to Israel not applied to comparable actors (Hamas, Iran, Russia). Demanding Israel justify actions never demanded of others.\nDH (Dehumanisation, 5%): Language reducing Israelis/Jews to animals, vermin, disease, or subhuman categories.\nAE (Asymmetric Empathy, 5%): Exclusively humanising Palestinian victims while systematically erasing Israeli/Jewish victims. No mention of Israeli casualties or Hamas atrocities alongside Palestinian ones.\nCO (Contextual Omission, 5%): Omitting Hamas rocket attacks, October 7 attacks, hostages, or other context that would explain Israeli actions.\n\nSCORING GUIDE — be precise:\n0 = Genuinely absent — no trace of this indicator anywhere in the edition\n1 = Minimal/isolated — a single phrase, easily attributable to editorial shorthand, not repeated\n2 = Occasional/mild — appears in 2-3 places, a pattern begins to emerge\n3 = Moderate/recurring — appears consistently across multiple articles or sections\n4 = Significant/prominent — a notable feature of the edition\'s overall framing\n5 = Pervasive/explicit — dominates coverage, overt and sustained throughout\n\nCRITICAL INSTRUCTION: Do NOT score everything 0. Most Spanish newspaper editions covering the Middle East will score at least 1-2 on DS, AE, CO and often D. Genuinely scoring 0 on ALL categories is extremely rare and should only happen for editions with zero Israel/Jewish content. If the edition covers Israel, Gaza, or the Middle East at all, expect non-zero scores on multiple categories.\n\nConfidence: High=explicit+repeated evidence, Medium=clear pattern but some ambiguity, Low=isolated or ambiguous\n\nRespond ONLY with valid JSON, no markdown, no preamble:\n{"scores":{"CB":0,"CT":0,"HI":0,"D":0,"DSD":0,"DS":0,"DH":0,"AE":0,"CO":0},"frs":0.0,"confidence":"Medium","evidence":"3-5 sentence evidence summary citing specific headlines, phrases and editorial choices observed.","main_drivers":"Detailed narrative explaining the main framing patterns found, with direct quotes or paraphrases from the content where possible."}';
 
 function readFileData(item) {
   return new Promise(function(resolve, reject) {
@@ -776,7 +790,9 @@ function runQueue() {
       var result;
       try { result = JSON.parse(raw); } catch(e) { throw new Error('Could not parse response'); }
       var frs = (typeof result.frs==='number'&&!isNaN(result.frs)) ? result.frs : CATS.reduce(function(a,c){return a+(result.scores[c.key]||0)*c.w;},0);
-      var entry = { id:Date.now()+idx, date:item.date, newspaper:item.newspaper, frs:parseFloat(frs.toFixed(2)), confidence:result.confidence||'Medium', evidence:result.evidence||'', main_drivers:result.main_drivers||result.evidence||'', scores:result.scores, notes:'' };
+      // Store raw text for word analysis (TXT files have full text; PDF has base64 which we skip)
+      var rawText = item.isTxt ? (item.data || '') : '';
+      var entry = { id:Date.now()+idx, date:item.date, newspaper:item.newspaper, frs:parseFloat(frs.toFixed(2)), confidence:result.confidence||'Medium', evidence:result.evidence||'', main_drivers:result.main_drivers||result.evidence||'', scores:result.scores, notes:'', rawText:rawText };
       var h = loadHistory(); h.push(entry); saveHistory(h);
       setQueueItemStatus(item.id, 'done');
       // Show last result
@@ -879,8 +895,10 @@ function countWordsInText(text, terms) {
 }
 
 function computeWordCounts(entry) {
-  // Use evidence + main_drivers as proxy for article text
-  var text = (entry.evidence || '') + ' ' + (entry.main_drivers || '');
+  // Use rawText (full article text) when available, fall back to evidence+main_drivers summaries
+  var text = (entry.rawText && entry.rawText.length > 100)
+    ? entry.rawText
+    : (entry.evidence || '') + ' ' + (entry.main_drivers || '');
   var neg = 0, pos = 0;
   var negDetail = [], posDetail = [];
   NEG_WORDS.forEach(function(w) {
@@ -972,16 +990,21 @@ function renderWordBars(h) {
   renderBars(negEl, NEG_WORDS.map(function(w){return{label:w.label,v:negTotals[w.label]};}), '#EF5350');
   renderBars(posEl, POS_WORDS.map(function(w){return{label:w.label,v:posTotals[w.label]};}), '#4CAF50');
 
-  // Per-edition table
-  h.slice().sort(function(a,b){return b.frs-a.frs;}).forEach(function(e) {
+  // Per-edition table — sorted by FRS descending
+  var sorted = h.slice().sort(function(a,b){return b.frs-a.frs;});
+  sorted.forEach(function(e) {
     var wc=computeWordCounts(e);
     var ratio = wc.pos>0 ? (wc.neg/wc.pos).toFixed(2) : wc.neg>0?'∞':'—';
     var col=paperColor(e.newspaper);
+    var hasFullText = e.rawText && e.rawText.length > 100;
     var tr=document.createElement('tr');
     tr.innerHTML=
-      '<td><span class="np-badge-sm" style="background:'+col+'22;color:'+col+'">'+e.newspaper+'</span> '+formatDate(e.date)+'</td>'+
-      '<td style="text-align:center;color:var(--red);font-weight:600">'+wc.neg+'</td>'+
-      '<td style="text-align:center;color:#4CAF50;font-weight:600">'+wc.pos+'</td>'+
+      '<td><span class="np-badge-sm" style="background:'+col+'22;color:'+col+'">'+e.newspaper+'</span><br>'+
+        '<span style="font-size:11px;color:var(--faint)">'+formatDate(e.date)+'</span>'+
+        (hasFullText ? '' : '<br><span style="font-size:10px;color:var(--faint);font-style:italic">counts from AI summary</span>')+
+      '</td>'+
+      '<td style="text-align:center;color:var(--red);font-weight:600;font-size:18px">'+wc.neg+'</td>'+
+      '<td style="text-align:center;color:#4CAF50;font-weight:600;font-size:18px">'+wc.pos+'</td>'+
       '<td style="text-align:center;color:var(--faint)">'+ratio+'</td>';
     tblBody.appendChild(tr);
   });
@@ -1000,6 +1023,102 @@ function renderAll() {
   renderRanking(h);
   renderEvidence(h);
   renderWordBars(h);
+  populateCompDateSelect(h);
+}
+
+function populateCompDateSelect(h) {
+  var sel = document.getElementById('compDateSelect');
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">— Select date —</option>';
+  var dates = {};
+  h.forEach(function(e){ dates[e.date]=true; });
+  Object.keys(dates).sort().reverse().forEach(function(d) {
+    var opt = document.createElement('option');
+    opt.value = d; opt.textContent = formatDate(d);
+    sel.appendChild(opt);
+  });
+  if (cur) sel.value = cur;
+}
+
+function downloadComparisonReport() {
+  var date = document.getElementById('compDateSelect').value;
+  if (!date) { alert('Please select a date first.'); return; }
+  var h = loadHistory().filter(function(e){ return e.date === date; });
+  if (!h.length) { alert('No editions found for this date.'); return; }
+
+  var status = document.getElementById('compStatus');
+  status.style.display = 'block';
+  status.textContent = 'Generating report…';
+
+  // Build HTML report
+  var dateLabel = formatDate(date);
+  var rows = h.slice().sort(function(a,b){ return b.frs-a.frs; });
+
+  var html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'+
+    '<title>Framing Risk Comparison — '+dateLabel+'</title>'+
+    '<style>'+
+    'body{font-family:Arial,sans-serif;margin:0;padding:32px;background:#f5f5f5;color:#1a1a18}'+
+    'h1{font-size:22px;margin-bottom:4px}'+
+    '.sub{font-size:14px;color:#666;margin-bottom:28px}'+
+    '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}'+
+    '.card{background:#fff;border-radius:12px;padding:20px;border:1px solid #e0e0e0;border-top:4px solid var(--col)}'+
+    '.paper{font-size:15px;font-weight:700;margin-bottom:2px}'+
+    '.frs{font-size:48px;font-weight:700;line-height:1;margin:12px 0 4px}'+
+    '.badge{display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;margin-bottom:12px}'+
+    '.cat-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:12px}'+
+    '.cat-name{flex:1;color:#555}'+
+    '.bar{flex:1;height:4px;background:#eee;border-radius:2px;overflow:hidden;max-width:100px}'+
+    '.bar-fill{height:100%;border-radius:2px}'+
+    '.cat-score{font-weight:700;min-width:20px;text-align:right}'+
+    '.ev{margin-top:12px;font-size:12px;color:#555;line-height:1.6;background:#f9f9f9;padding:10px;border-radius:6px}'+
+    '.drivers{margin-top:10px;font-size:12px;color:#444;line-height:1.6}'+
+    'h2{font-size:13px;color:#888;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 6px}'+
+    '@media print{body{padding:16px}.grid{grid-template-columns:repeat(2,1fr)}}'+
+    '</style></head><body>'+
+    '<h1>Media Framing Risk — Comparison Report</h1>'+
+    '<div class="sub">Date: '+dateLabel+' &nbsp;·&nbsp; '+rows.length+' edition(s) analysed &nbsp;·&nbsp; Generated: '+new Date().toLocaleString()+'</div>'+
+    '<div class="grid">';
+
+  var catColors = {'CB':'#7F77DD','CT':'#7F77DD','HI':'#EF5350','D':'#FF7043','DSD':'#FF7043','DS':'#FFC107','DH':'#EF5350','AE':'#FFC107','CO':'#FFC107'};
+  var paperColorMap = {'El Mundo':'#F5A623','La Razón':'#7ED321','ABC':'#E05252','El País':'#4A90D9'};
+
+  rows.forEach(function(e) {
+    var col = paperColorMap[e.newspaper] || '#7F77DD';
+    var bs = e.frs < 1 ? {label:'No Risk',bg:'#EAF3DE',col:'#27500A'} :
+             e.frs < 2 ? {label:'Low',bg:'#EAF3DE',col:'#27500A'} :
+             e.frs < 3 ? {label:'Moderate',bg:'#FAEEDA',col:'#633806'} :
+             e.frs < 4 ? {label:'High',bg:'#FAECE7',col:'#712B13'} :
+                         {label:'Very High',bg:'#FCEBEB',col:'#791F1F'};
+    html += '<div class="card" style="--col:'+col+';border-top-color:'+col+'">';
+    html += '<div class="paper" style="color:'+col+'">'+e.newspaper+'</div>';
+    html += '<div class="frs" style="color:'+col+'">'+e.frs.toFixed(2)+'</div>';
+    html += '<span class="badge" style="background:'+bs.bg+';color:'+bs.col+'">'+bs.label+'</span>';
+    html += '<div style="font-size:11px;color:#999;margin-bottom:10px">Confidence: '+e.confidence+'</div>';
+    html += '<h2>Category scores</h2>';
+    CATS.forEach(function(c) {
+      var s = e.scores&&typeof e.scores[c.key]==='number'?e.scores[c.key]:0;
+      var pct = Math.round(s/5*100);
+      var bcol = s<=1?'#4CAF50':s<=2?'#FFC107':s<=3?'#FF7043':'#EF5350';
+      html += '<div class="cat-row"><span class="cat-name">'+c.label+'</span>'+
+        '<div class="bar"><div class="bar-fill" style="width:'+pct+'%;background:'+bcol+'"></div></div>'+
+        '<span class="cat-score" style="color:'+bcol+'">'+s.toFixed(0)+'</span></div>';
+    });
+    html += '<h2>Evidence</h2><div class="ev">'+(e.evidence||'No evidence summary.')+'</div>';
+    if (e.main_drivers && e.main_drivers !== e.evidence) {
+      html += '<h2>Main drivers</h2><div class="drivers">'+e.main_drivers+'</div>';
+    }
+    html += '</div>';
+  });
+
+  html += '</div></body></html>';
+
+  // Download
+  var blob = new Blob([html], {type:'text/html'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'framing-comparison-'+date+'.html';
+  a.click();
+  status.textContent = 'Report downloaded — open the HTML file in your browser to view or print it.';
 }
 
 // ── Cards ──────────────────────────────────────────────────────────────────
