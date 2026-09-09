@@ -1081,8 +1081,7 @@ function downloadComparisonReport() {
   var dateLabel = formatDate(date);
   var rows = h.slice().sort(function(a,b){ return b.frs-a.frs; });
 
-  var html = '<!DOCTYPE html>
-<!-- version: 2026-09-09 22:07:10 --><html lang="en"><head><meta charset="UTF-8">'+
+  var html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'+
     '<title>Framing Risk Comparison — '+dateLabel+'</title>'+
     '<style>'+
     'body{font-family:Arial,sans-serif;margin:0;padding:32px;background:#f5f5f5;color:#1a1a18}'+
@@ -1406,4 +1405,3 @@ function importJSON(input) {
 </script>
 </body>
 </html>
-Wed  9 Sep 2026 23:17:29 BST
