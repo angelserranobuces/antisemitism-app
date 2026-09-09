@@ -463,9 +463,30 @@ tr:hover td { background:var(--surf2); }
     <div class="dl-card">
       <div class="dl-info">
         <h4>Export as JSON</h4>
-        <p>Full dataset including evidence summaries, word counts and all category scores</p>
+        <p>Full database backup — use this to move your data between devices or browsers</p>
       </div>
       <button class="dl-btn" onclick="downloadJSON()">Download JSON</button>
+    </div>
+    <div class="dl-card" style="border-color:var(--p600)">
+      <div class="dl-info">
+        <h4>Import backup</h4>
+        <p>Restore a previously exported JSON backup — data will be merged with existing records</p>
+      </div>
+      <label class="dl-btn" style="cursor:pointer">
+        Import JSON
+        <input type="file" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
+      </label>
+    </div>
+    <div class="card" style="margin-top:1rem;background:var(--surf2)">
+      <div class="clabel">&#128274; About data storage</div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.7">
+        All analysis results are saved automatically in your <strong>browser's local storage</strong>
+        after each analysis. Data persists across sessions as long as you use the same browser on
+        the same device.<br><br>
+        To <strong>back up or move your data</strong>, use the Export JSON button above. To restore
+        on another device or browser, use Import JSON. Data is stored under the key
+        <code style="background:var(--surf3);padding:1px 6px;border-radius:4px;font-size:11px">framing_risk_history_v2</code>.
+      </p>
     </div>
   </div>
 
@@ -491,7 +512,29 @@ var b64 = null;
 var fileIsTxt = false;
 
 // ── Storage ────────────────────────────────────────────────────────────────
-function loadHistory() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); } catch(e){ return []; } }
+function loadHistory() {
+  try {
+    // Migrate from older storage keys if present
+    var OLD_KEYS = ['framing_risk_history', 'framing_risk_history_v1'];
+    OLD_KEYS.forEach(function(k) {
+      var old = localStorage.getItem(k);
+      if (old) {
+        try {
+          var oldData = JSON.parse(old);
+          if (oldData && oldData.length) {
+            var cur = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            // Merge avoiding duplicates by id
+            var ids = {}; cur.forEach(function(e){ ids[e.id]=true; });
+            oldData.forEach(function(e){ if(!ids[e.id]) cur.push(e); });
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(cur));
+          }
+        } catch(e2){}
+        localStorage.removeItem(k); // clean up old key
+      }
+    });
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  } catch(e) { return []; }
+}
 function saveHistory(h) { localStorage.setItem(STORAGE_KEY, JSON.stringify(h)); }
 
 // ── Queue state ────────────────────────────────────────────────────────────
@@ -1187,6 +1230,31 @@ function download(filename, text, type) {
   var a=document.createElement('a');
   a.href='data:'+type+';charset=utf-8,'+encodeURIComponent(text);
   a.download=filename; a.click();
+}
+
+function importJSON(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var imported = JSON.parse(e.target.result);
+      if (!Array.isArray(imported)) throw new Error('Invalid format');
+      var cur = loadHistory();
+      var ids = {}; cur.forEach(function(e){ ids[e.id]=true; });
+      var added = 0;
+      imported.forEach(function(entry) {
+        if (!ids[entry.id]) { cur.push(entry); added++; }
+      });
+      saveHistory(cur);
+      renderAll();
+      alert('Import successful — ' + added + ' new record(s) added, ' + (imported.length - added) + ' duplicate(s) skipped.');
+    } catch(err) {
+      alert('Import failed: ' + err.message + '. Make sure you are uploading a valid JSON backup file.');
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
 }
 </script>
 </body>
