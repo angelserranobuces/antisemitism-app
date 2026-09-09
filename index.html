@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- version: 2026-09-09 21:57:22 -->
+<!-- version: 2026-09-09 22:02:30 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -630,20 +630,41 @@ function addFilesToQueue(files) {
   hideError();
   var added = 0;
   files.forEach(function(f) {
-    var valid = f.type==='application/pdf' || f.type==='text/plain' || f.name.endsWith('.pdf') || f.name.endsWith('.txt');
-    if (!valid) return;
+    // Accept any file ending in .pdf or .txt regardless of MIME type
+    // (macOS sometimes reports empty or wrong MIME type for txt files)
+    var nameLower = f.name.toLowerCase();
+    var isPdf = nameLower.endsWith('.pdf');
+    var isTxt = nameLower.endsWith('.txt');
+    var valid = isPdf || isTxt ||
+                f.type === 'application/pdf' ||
+                f.type === 'text/plain' ||
+                f.type === 'application/octet-stream';
+    if (!valid) { 
+      showError(f.name + ': unsupported file type. Please upload PDF or TXT files only.');
+      return; 
+    }
     var meta = parseFilename(f.name);
-    var item = { id: Date.now() + Math.random(), file: f, name: f.name, size: f.size, newspaper: meta.newspaper, date: meta.date, isTxt: f.name.endsWith('.txt') || f.type==='text/plain', data: null, status: 'pending' };
+    var item = { 
+      id: Date.now() + '_' + Math.floor(Math.random()*100000), 
+      file: f, 
+      name: f.name, 
+      size: f.size, 
+      newspaper: meta.newspaper, 
+      date: meta.date, 
+      isTxt: isTxt || f.type === 'text/plain', 
+      data: null, 
+      status: 'pending' 
+    };
     fileQueue.push(item);
     added++;
   });
-  if (added === 0) { showError('No valid PDF or TXT files found.'); return; }
+  if (added === 0 && fileQueue.length === 0) { showError('No valid PDF or TXT files found. Make sure your files end in .pdf or .txt'); return; }
   renderQueue();
   updateAnalyseBtn();
 }
 
 function removeFromQueue(id) {
-  fileQueue = fileQueue.filter(function(i){ return i.id !== id; });
+  fileQueue = fileQueue.filter(function(i){ return String(i.id) !== String(id); });
   renderQueue();
   updateAnalyseBtn();
 }
@@ -674,13 +695,13 @@ function renderQueue() {
         '<div class="queue-meta">'+paperLabel+formatDate(item.date)+' · '+(item.size/1024/1024).toFixed(2)+' MB</div>'+
       '</div>'+
       '<span class="queue-status '+statusClass+'">'+statusLabel+'</span>'+
-      (item.status==='pending' ? '<button class="queue-rm" onclick="removeFromQueue('+item.id+')" title="Remove">&#215;</button>' : '');
+      (item.status==='pending' ? '<button class="queue-rm" onclick="removeFromQueue(\''+item.id+'\')" title="Remove">&#215;</button>' : '');
     container.appendChild(div);
   });
 }
 
 function setQueueItemStatus(id, status) {
-  fileQueue.forEach(function(i){ if(i.id===id) i.status=status; });
+  fileQueue.forEach(function(i){ if(String(i.id)===String(id)) i.status=status; });
   renderQueue();
 }
 
@@ -1056,7 +1077,7 @@ function downloadComparisonReport() {
   var rows = h.slice().sort(function(a,b){ return b.frs-a.frs; });
 
   var html = '<!DOCTYPE html>
-<!-- version: 2026-09-09 21:57:22 --><html lang="en"><head><meta charset="UTF-8">'+
+<!-- version: 2026-09-09 22:02:30 --><html lang="en"><head><meta charset="UTF-8">'+
     '<title>Framing Risk Comparison — '+dateLabel+'</title>'+
     '<style>'+
     'body{font-family:Arial,sans-serif;margin:0;padding:32px;background:#f5f5f5;color:#1a1a18}'+
