@@ -553,7 +553,6 @@ function loadHistory() {
   } catch(e) { return []; }
 }
 function compressEntry(e) {
-  // Strip rawText and truncate long strings to keep storage small
   return {
     id:          e.id,
     date:        e.date,
@@ -561,10 +560,14 @@ function compressEntry(e) {
     frs:         e.frs,
     confidence:  e.confidence,
     scores:      e.scores,
-    evidence:    e.evidence    ? e.evidence.slice(0, 500)    : '',
+    evidence:    e.evidence     ? e.evidence.slice(0, 500)     : '',
     main_drivers:e.main_drivers ? e.main_drivers.slice(0, 800) : '',
-    notes:       e.notes || ''
-    // rawText intentionally excluded — too large for localStorage
+    notes:       e.notes || '',
+    negCounts:   e.negCounts  || {},
+    posCounts:   e.posCounts  || {},
+    negTotal:    e.negTotal   || 0,
+    posTotal:    e.posTotal   || 0
+    // rawText excluded — too large for localStorage
   };
 }
 
@@ -911,8 +914,19 @@ function runQueue() {
         safeScores[c.key] = (result.scores && typeof result.scores[c.key] === 'number') ? result.scores[c.key] : 0;
       });
       var frs = (typeof result.frs==='number'&&!isNaN(result.frs)) ? result.frs : CATS.reduce(function(a,c){return a+safeScores[c.key]*c.w;},0);
-      // Store raw text for word analysis (TXT files have full text; PDF has base64 which we skip)
+      // Compute word counts now while we have the full text, and save them in the entry
       var rawText = item.isTxt ? (item.data || '') : '';
+      var textForCounting = rawText.length > 100 ? rawText : (result.evidence||'') + ' ' + (result.main_drivers||'');
+      var negCounts = {}, posCounts = {};
+      var negTotal = 0, posTotal = 0;
+      NEG_WORDS.forEach(function(w) {
+        var c = countWordsInText(textForCounting, w.terms);
+        negCounts[w.label] = c; negTotal += c;
+      });
+      POS_WORDS.forEach(function(w) {
+        var c = countWordsInText(textForCounting, w.terms);
+        posCounts[w.label] = c; posTotal += c;
+      });
       var entry = { 
         id: Date.now()+'_'+idx, 
         date: item.date, 
@@ -922,8 +936,12 @@ function runQueue() {
         evidence: result.evidence || '', 
         main_drivers: result.main_drivers || result.evidence || '', 
         scores: safeScores, 
-        notes: '', 
-        rawText: rawText 
+        notes: '',
+        negCounts: negCounts,
+        posCounts: posCounts,
+        negTotal: negTotal,
+        posTotal: posTotal
+        // rawText NOT saved — too large for localStorage
       };
       var h = loadHistory(); h.push(entry); saveHistory(h);
       setQueueItemStatus(item.id, 'done');
@@ -1028,10 +1046,14 @@ function countWordsInText(text, terms) {
 }
 
 function computeWordCounts(entry) {
-  // Use rawText (full article text) when available, fall back to evidence+main_drivers summaries
-  var text = (entry.rawText && entry.rawText.length > 100)
-    ? entry.rawText
-    : (entry.evidence || '') + ' ' + (entry.main_drivers || '');
+  // Use pre-computed counts saved at analysis time if available
+  if (entry.negCounts && entry.posCounts) {
+    var negDetail = NEG_WORDS.map(function(w) { return { label: w.label, count: entry.negCounts[w.label] || 0 }; });
+    var posDetail = POS_WORDS.map(function(w) { return { label: w.label, count: entry.posCounts[w.label] || 0 }; });
+    return { neg: entry.negTotal || 0, pos: entry.posTotal || 0, negDetail: negDetail, posDetail: posDetail };
+  }
+  // Fallback: count from evidence+main_drivers text
+  var text = (entry.evidence || '') + ' ' + (entry.main_drivers || '');
   var neg = 0, pos = 0;
   var negDetail = [], posDetail = [];
   NEG_WORDS.forEach(function(w) {
