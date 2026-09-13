@@ -726,7 +726,8 @@ function onDrop(e) {
 function callAPIWithItem(item, sys, userText, maxTokens) {
   var messages;
   if (item.isTxt) {
-    messages = [{role:'user',content:[{type:'text',text:userText+'\n\n'+item.data.slice(0,60000)}]}];
+    // Cap at 30,000 chars (~7,500 tokens) to stay well within per-minute token limits
+    messages = [{role:'user',content:[{type:'text',text:userText+'\n\n'+item.data.slice(0,30000)}]}];
   } else {
     messages = [{role:'user',content:[
       {type:'document',source:{type:'base64',media_type:'application/pdf',data:item.data}},
@@ -744,7 +745,11 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
   })
   .then(function(res) {
     clearTimeout(fetchTimeout);
-    if (!res.ok) return res.json().then(function(e){ throw new Error(e.error?e.error.message:'HTTP '+res.status); });
+    if (!res.ok) return res.json().then(function(e){
+      var msg = e.error ? e.error.message : 'HTTP '+res.status;
+      // Include HTTP status in error for better debugging
+      throw new Error('[HTTP '+res.status+'] '+msg);
+    });
     return res.json();
   })
   .then(function(data) {
@@ -755,7 +760,7 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
     clearTimeout(fetchTimeout);
     if (err.name==='AbortError') throw new Error('Request timed out — file may be too large');
     if (err.message==='Failed to fetch'||err.message==='Load failed'||err.message.indexOf('NetworkError')!==-1) {
-      throw new Error('Network error — check your internet connection and that the server is running');
+      throw new Error('Network error — check your internet connection');
     }
     throw err;
   });
@@ -824,7 +829,8 @@ function runQueue() {
       setQueueItemStatus(item.id, 'done');
       // Show last result
       if (idx === pending.length - 1) showResult(result, item.newspaper, item.date);
-      processNext(idx + 1);
+      // Wait 5 seconds between files to avoid API rate limiting
+      setTimeout(function(){ processNext(idx + 1); }, idx < pending.length - 1 ? 5000 : 0);
     })
     .catch(function(err) {
       setQueueItemStatus(item.id, 'error');
