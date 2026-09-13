@@ -5,7 +5,7 @@ const path  = require('path');
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const PORT = process.env.PORT || 3000;
-const MAX_BODY = 100 * 1024 * 1024;
+const MAX_BODY = 800 * 1024 * 1024; // 800 MB — handles full newspaper TXT files
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -67,7 +67,7 @@ function proxyToAnthropic(req, res) {
         console.log('[API] Anthropic status:', apiRes.statusCode);
         // Always log full response for debugging
         // Log full response for debugging (truncated to 2000 chars)
-console.log('[API] Anthropic response:', body.slice(0, 2000));
+console.log('[API] Anthropic response (full):', body);
 try {
   var parsed = JSON.parse(body);
   console.log('[API] stop_reason:', parsed.stop_reason);

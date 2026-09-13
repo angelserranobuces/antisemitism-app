@@ -765,14 +765,15 @@ function onDrop(e) {
 function callAPIWithItem(item, sys, userText, maxTokens) {
   var messages;
   if (item.isTxt) {
-    // Send up to 80,000 chars — for very long files send first 50k + last 30k
-    // to capture both early and late articles in the edition
+    // Send the full file — Anthropic supports up to ~600,000 characters in context
+    // Only truncate if the file is extremely large
     var txt = item.data;
     var excerpt;
-    if (txt.length <= 80000) {
-      excerpt = txt;
+    if (txt.length <= 600000) {
+      excerpt = txt; // send the entire file
     } else {
-      excerpt = txt.slice(0, 50000) + '\n\n[... middle section omitted for length ...]\n\n' + txt.slice(-30000);
+      // For very large files: first 400k + last 200k to cover full edition
+      excerpt = txt.slice(0, 400000) + '\n\n[... middle section omitted — file exceeds 600,000 characters ...]\n\n' + txt.slice(-200000);
     }
     messages = [{role:'user',content:[{type:'text',text:userText+'\n\n'+excerpt}]}];
   } else {
@@ -787,7 +788,7 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
   return fetch('/api/messages', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:4000, system:sys, messages:messages }),
+    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:8000, system:sys, messages:messages }),
     signal: controller.signal
   })
   .then(function(res) {
@@ -955,8 +956,8 @@ function runQueue() {
       setQueueItemStatus(item.id, 'done');
       // Show last result
       if (idx === pending.length - 1) showResult(result, item.newspaper, item.date);
-      // Wait 8 seconds between files to avoid API rate limiting with larger payloads
-      setTimeout(function(){ processNext(idx + 1); }, idx < pending.length - 1 ? 8000 : 0);
+      // Wait 15 seconds between files to avoid rate limiting with full-text payloads
+      setTimeout(function(){ processNext(idx + 1); }, idx < pending.length - 1 ? 15000 : 0);
     })
     .catch(function(err) {
       setQueueItemStatus(item.id, 'error');
