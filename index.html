@@ -740,7 +740,7 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
   return fetch('/api/messages', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:maxTokens, system:sys, messages:messages }),
+    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:2000, system:sys, messages:messages }),
     signal: controller.signal
   })
   .then(function(res) {
@@ -754,7 +754,18 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
   })
   .then(function(data) {
     if (!data.content||!data.content.length) throw new Error('Empty response from API');
-    return data.content.filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('').replace(/```json|```/g,'').trim();
+    var raw = data.content.filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
+    // Robust JSON extraction — handle fences, whitespace, truncation
+    // Try 1: strip fences and parse directly
+    var cleaned = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
+    try { return cleaned; } catch(e) {}
+    // Try 2: find the first { and last } to extract JSON object
+    var start = raw.indexOf('{');
+    var end = raw.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      return raw.slice(start, end+1);
+    }
+    throw new Error('Could not extract JSON from response');
   })
   .catch(function(err) {
     clearTimeout(fetchTimeout);
@@ -816,11 +827,22 @@ function runQueue() {
 
     readFileData(item)
     .then(function() {
-      return callAPIWithItem(item, SYS_PROMPT, 'Analyse this newspaper content for antisemitic framing and return the JSON assessment.', 1200);
+      return callAPIWithItem(item, SYS_PROMPT, 'Analyse this newspaper content for antisemitic framing and return the JSON assessment.', 2000);
     })
     .then(function(raw) {
       var result;
-      try { result = JSON.parse(raw); } catch(e) { throw new Error('Could not parse response'); }
+      // Robust parse — try directly, then extract JSON object
+      try {
+        result = JSON.parse(raw);
+      } catch(e) {
+        var s = raw.indexOf('{'), en = raw.lastIndexOf('}');
+        if (s !== -1 && en > s) {
+          try { result = JSON.parse(raw.slice(s, en+1)); }
+          catch(e2) { throw new Error('Parse error: ' + raw.slice(0,120)); }
+        } else {
+          throw new Error('Parse error: ' + raw.slice(0,120));
+        }
+      }
       var frs = (typeof result.frs==='number'&&!isNaN(result.frs)) ? result.frs : CATS.reduce(function(a,c){return a+(result.scores[c.key]||0)*c.w;},0);
       // Store raw text for word analysis (TXT files have full text; PDF has base64 which we skip)
       var rawText = item.isTxt ? (item.data || '') : '';
