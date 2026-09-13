@@ -3,12 +3,10 @@ const https = require('https');
 const fs    = require('fs');
 const path  = require('path');
 
-// ── Put your Anthropic API key here ───────────────────────────────────────
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || 'YOUR_API_KEY_HERE';
-const PORT = 3000;
-const MAX_BODY = 100 * 1024 * 1024; // 100 MB — handles large scanned newspaper PDFs
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const PORT = process.env.PORT || 3000;
+const MAX_BODY = 100 * 1024 * 1024; // 100 MB
 
-// ── MIME types ─────────────────────────────────────────────────────────────
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js':   'application/javascript',
@@ -26,22 +24,32 @@ function serveFile(res, filePath) {
 }
 
 function proxyToAnthropic(req, res) {
-  var chunks = [];
-  var size = 0;
+  var chunks = [], size = 0;
 
   req.on('data', function(chunk) {
     size += chunk.length;
     if (size > MAX_BODY) {
       res.writeHead(413, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: 'PDF too large (max 50 MB).' } }));
-      req.destroy();
-      return;
+      res.end(JSON.stringify({ error: { message: 'File too large (max 100 MB).' } }));
+      req.destroy(); return;
     }
     chunks.push(chunk);
   });
 
   req.on('end', function() {
+    if (res.destroyed) return;
     var bodyStr = Buffer.concat(chunks).toString();
+
+    // Log request size for debugging
+    console.log('[API] Request size:', Math.round(size/1024), 'KB');
+
+    // Check API key is set
+    if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === 'YOUR_API_KEY_HERE') {
+      console.error('[API] ERROR: ANTHROPIC_API_KEY not set');
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Server configuration error: API key not set' } }));
+      return;
+    }
 
     var options = {
       hostname: 'api.anthropic.com',
@@ -59,15 +67,22 @@ function proxyToAnthropic(req, res) {
       var resp = [];
       apiRes.on('data', function(c) { resp.push(c); });
       apiRes.on('end', function() {
+        var body = Buffer.concat(resp).toString();
+        // Log Anthropic response status for debugging
+        console.log('[API] Anthropic status:', apiRes.statusCode);
+        if (apiRes.statusCode !== 200) {
+          console.error('[API] Anthropic error response:', body.slice(0, 500));
+        }
         res.writeHead(apiRes.statusCode, {
           'Content-Type':                'application/json',
           'Access-Control-Allow-Origin': '*',
         });
-        res.end(Buffer.concat(resp).toString());
+        res.end(body);
       });
     });
 
     apiReq.on('error', function(err) {
+      console.error('[API] Request error:', err.message);
       res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Proxy error: ' + err.message } }));
     });
@@ -77,37 +92,22 @@ function proxyToAnthropic(req, res) {
   });
 }
 
-// ── HTTP server ────────────────────────────────────────────────────────────
 http.createServer(function(req, res) {
-
-  // CORS preflight
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin':  '*',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     });
-    res.end();
-    return;
+    res.end(); return;
   }
-
-  // API proxy
   if (req.method === 'POST' && req.url === '/api/messages') {
-    proxyToAnthropic(req, res);
-    return;
+    proxyToAnthropic(req, res); return;
   }
-
-  // Static files
   var urlPath = (req.url === '/' || req.url === '') ? '/index.html' : req.url;
   serveFile(res, path.join(__dirname, urlPath));
 
 }).listen(PORT, function() {
-  console.log('');
-  console.log('  ✓  Media Framing Risk Analyser is running');
-  console.log('');
-  console.log('     Open this in your browser:');
-  console.log('     → http://localhost:' + PORT);
-  console.log('');
-  console.log('     Press Ctrl+C to stop.');
-  console.log('');
+  console.log('Media Framing Risk Analyser running on port ' + PORT);
+  console.log('API key set:', ANTHROPIC_API_KEY ? 'YES (length: ' + ANTHROPIC_API_KEY.length + ')' : 'NO');
 });
