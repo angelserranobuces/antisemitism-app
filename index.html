@@ -740,7 +740,7 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
   return fetch('/api/messages', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:2000, system:sys, messages:messages }),
+    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:3000, system:sys, messages:messages }),
     signal: controller.signal
   })
   .then(function(res) {
@@ -754,18 +754,26 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
   })
   .then(function(data) {
     if (!data.content||!data.content.length) throw new Error('Empty response from API');
-    var raw = data.content.filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
-    // Robust JSON extraction — handle fences, whitespace, truncation
-    // Try 1: strip fences and parse directly
-    var cleaned = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
-    try { return cleaned; } catch(e) {}
-    // Try 2: find the first { and last } to extract JSON object
-    var start = raw.indexOf('{');
-    var end = raw.lastIndexOf('}');
-    if (start !== -1 && end !== -1 && end > start) {
-      return raw.slice(start, end+1);
+    // Check if Anthropic returned an error object despite 200 status
+    if (data.type === 'error' || (data.error && data.error.message)) {
+      throw new Error(data.error.message || 'API error');
     }
-    throw new Error('Could not extract JSON from response');
+    var raw = data.content.filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
+    // Check if the text content itself contains an error signal
+    if (data.stop_reason === 'max_tokens') {
+      // Response was cut off — try to extract whatever JSON we have
+      console.warn('Response truncated at max_tokens — attempting partial parse');
+    }
+    // Robust JSON extraction — handle fences, whitespace, truncation
+    var cleaned = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
+    // Find the first { and last } to extract JSON object
+    var start = cleaned.indexOf('{');
+    var end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      return cleaned.slice(start, end+1);
+    }
+    // If no JSON found, the whole response may be an error message
+    throw new Error(raw.slice(0, 200));
   })
   .catch(function(err) {
     clearTimeout(fetchTimeout);
@@ -831,16 +839,33 @@ function runQueue() {
     })
     .then(function(raw) {
       var result;
-      // Robust parse — try directly, then extract JSON object
+      // Robust parse — try directly, then extract JSON object, then repair truncated JSON
       try {
         result = JSON.parse(raw);
       } catch(e) {
         var s = raw.indexOf('{'), en = raw.lastIndexOf('}');
         if (s !== -1 && en > s) {
           try { result = JSON.parse(raw.slice(s, en+1)); }
-          catch(e2) { throw new Error('Parse error: ' + raw.slice(0,120)); }
+          catch(e2) {
+            // Try to repair truncated JSON by extracting just the scores object
+            var scoresMatch = raw.match(/"scores"\s*:\s*(\{[^}]+\})/);
+            var frsMatch = raw.match(/"frs"\s*:\s*([\d.]+)/);
+            var confMatch = raw.match(/"confidence"\s*:\s*"([^"]+)"/);
+            var evMatch = raw.match(/"evidence"\s*:\s*"([^"]+)"/);
+            if (scoresMatch || frsMatch) {
+              result = {
+                scores: scoresMatch ? JSON.parse(scoresMatch[1]) : {},
+                frs: frsMatch ? parseFloat(frsMatch[1]) : 0,
+                confidence: confMatch ? confMatch[1] : 'Low',
+                evidence: evMatch ? evMatch[1] : 'Response was truncated.',
+                main_drivers: 'Response was truncated — partial analysis only.'
+              };
+            } else {
+              throw new Error('Parse error: ' + raw.slice(0,120));
+            }
+          }
         } else {
-          throw new Error('Parse error: ' + raw.slice(0,120));
+          throw new Error('No JSON found in response: ' + raw.slice(0,120));
         }
       }
       // Ensure scores object exists and all keys are numbers
