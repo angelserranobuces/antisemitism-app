@@ -5,7 +5,7 @@ const path  = require('path');
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const PORT = process.env.PORT || 3000;
-const MAX_BODY = 100 * 1024 * 1024; // 100 MB
+const MAX_BODY = 100 * 1024 * 1024;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -39,15 +39,11 @@ function proxyToAnthropic(req, res) {
   req.on('end', function() {
     if (res.destroyed) return;
     var bodyStr = Buffer.concat(chunks).toString();
-
-    // Log request size for debugging
     console.log('[API] Request size:', Math.round(size/1024), 'KB');
 
-    // Check API key is set
-    if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === 'YOUR_API_KEY_HERE') {
-      console.error('[API] ERROR: ANTHROPIC_API_KEY not set');
+    if (!ANTHROPIC_API_KEY) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: 'Server configuration error: API key not set' } }));
+      res.end(JSON.stringify({ error: { message: 'API key not set on server' } }));
       return;
     }
 
@@ -68,11 +64,9 @@ function proxyToAnthropic(req, res) {
       apiRes.on('data', function(c) { resp.push(c); });
       apiRes.on('end', function() {
         var body = Buffer.concat(resp).toString();
-        // Log Anthropic response status for debugging
         console.log('[API] Anthropic status:', apiRes.statusCode);
-        if (apiRes.statusCode !== 200) {
-          console.error('[API] Anthropic error response:', body.slice(0, 500));
-        }
+        // Always log full response for debugging
+        console.log('[API] Anthropic response:', body.slice(0, 1000));
         res.writeHead(apiRes.statusCode, {
           'Content-Type':                'application/json',
           'Access-Control-Allow-Origin': '*',
@@ -109,5 +103,5 @@ http.createServer(function(req, res) {
 
 }).listen(PORT, function() {
   console.log('Media Framing Risk Analyser running on port ' + PORT);
-  console.log('API key set:', ANTHROPIC_API_KEY ? 'YES (length: ' + ANTHROPIC_API_KEY.length + ')' : 'NO');
+  console.log('API key set: YES (length:', ANTHROPIC_API_KEY.length + ')');
 });
