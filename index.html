@@ -765,8 +765,16 @@ function onDrop(e) {
 function callAPIWithItem(item, sys, userText, maxTokens) {
   var messages;
   if (item.isTxt) {
-    // Cap at 30,000 chars (~7,500 tokens) to stay well within per-minute token limits
-    messages = [{role:'user',content:[{type:'text',text:userText+'\n\n'+item.data.slice(0,30000)}]}];
+    // Send up to 80,000 chars — for very long files send first 50k + last 30k
+    // to capture both early and late articles in the edition
+    var txt = item.data;
+    var excerpt;
+    if (txt.length <= 80000) {
+      excerpt = txt;
+    } else {
+      excerpt = txt.slice(0, 50000) + '\n\n[... middle section omitted for length ...]\n\n' + txt.slice(-30000);
+    }
+    messages = [{role:'user',content:[{type:'text',text:userText+'\n\n'+excerpt}]}];
   } else {
     messages = [{role:'user',content:[
       {type:'document',source:{type:'base64',media_type:'application/pdf',data:item.data}},
@@ -779,7 +787,7 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
   return fetch('/api/messages', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:3000, system:sys, messages:messages }),
+    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:4000, system:sys, messages:messages }),
     signal: controller.signal
   })
   .then(function(res) {
@@ -947,8 +955,8 @@ function runQueue() {
       setQueueItemStatus(item.id, 'done');
       // Show last result
       if (idx === pending.length - 1) showResult(result, item.newspaper, item.date);
-      // Wait 5 seconds between files to avoid API rate limiting
-      setTimeout(function(){ processNext(idx + 1); }, idx < pending.length - 1 ? 5000 : 0);
+      // Wait 8 seconds between files to avoid API rate limiting with larger payloads
+      setTimeout(function(){ processNext(idx + 1); }, idx < pending.length - 1 ? 8000 : 0);
     })
     .catch(function(err) {
       setQueueItemStatus(item.id, 'error');
