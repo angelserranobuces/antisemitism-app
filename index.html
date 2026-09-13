@@ -843,10 +843,26 @@ function runQueue() {
           throw new Error('Parse error: ' + raw.slice(0,120));
         }
       }
-      var frs = (typeof result.frs==='number'&&!isNaN(result.frs)) ? result.frs : CATS.reduce(function(a,c){return a+(result.scores[c.key]||0)*c.w;},0);
+      // Ensure scores object exists and all keys are numbers
+      var safeScores = {};
+      CATS.forEach(function(c) {
+        safeScores[c.key] = (result.scores && typeof result.scores[c.key] === 'number') ? result.scores[c.key] : 0;
+      });
+      var frs = (typeof result.frs==='number'&&!isNaN(result.frs)) ? result.frs : CATS.reduce(function(a,c){return a+safeScores[c.key]*c.w;},0);
       // Store raw text for word analysis (TXT files have full text; PDF has base64 which we skip)
       var rawText = item.isTxt ? (item.data || '') : '';
-      var entry = { id:Date.now()+idx, date:item.date, newspaper:item.newspaper, frs:parseFloat(frs.toFixed(2)), confidence:result.confidence||'Medium', evidence:result.evidence||'', main_drivers:result.main_drivers||result.evidence||'', scores:result.scores, notes:'', rawText:rawText };
+      var entry = { 
+        id: Date.now()+'_'+idx, 
+        date: item.date, 
+        newspaper: item.newspaper, 
+        frs: parseFloat(frs.toFixed(2)), 
+        confidence: result.confidence || 'Medium', 
+        evidence: result.evidence || '', 
+        main_drivers: result.main_drivers || result.evidence || '', 
+        scores: safeScores, 
+        notes: '', 
+        rawText: rawText 
+      };
       var h = loadHistory(); h.push(entry); saveHistory(h);
       setQueueItemStatus(item.id, 'done');
       // Show last result
@@ -888,7 +904,7 @@ function showResult(r, pub, dt) {
   document.getElementById('resConf').textContent = 'Confidence: '+(r.confidence||'Medium');
   var rows = document.getElementById('catRows'); rows.innerHTML='';
   CATS.forEach(function(c){
-    var s=typeof r.scores[c.key]==='number'?r.scores[c.key]:0;
+    var s = (r.scores && typeof r.scores[c.key]==='number') ? r.scores[c.key] : 0;
     var pct=Math.round(s/5*100); var bcol=barColor(s);
     var row=document.createElement('div'); row.className='cat-row';
     row.innerHTML='<span class="cat-nm">'+c.label+'</span><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+bcol+'"></div></div><span class="cat-sc" style="color:'+bcol+'">'+s.toFixed(1)+'</span>';
