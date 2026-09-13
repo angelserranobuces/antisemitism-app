@@ -838,6 +838,7 @@ function runQueue() {
       return callAPIWithItem(item, SYS_PROMPT, 'Analyse this newspaper content for antisemitic framing and return the JSON assessment.', 2000);
     })
     .then(function(raw) {
+      console.log('[PARSE] Raw string first 300 chars:', raw.slice(0,300));
       var result;
       // Robust parse — try directly, then extract JSON object, then repair truncated JSON
       try {

@@ -66,7 +66,16 @@ function proxyToAnthropic(req, res) {
         var body = Buffer.concat(resp).toString();
         console.log('[API] Anthropic status:', apiRes.statusCode);
         // Always log full response for debugging
-        console.log('[API] Anthropic response:', body.slice(0, 1000));
+        // Log full response for debugging (truncated to 2000 chars)
+console.log('[API] Anthropic response:', body.slice(0, 2000));
+try {
+  var parsed = JSON.parse(body);
+  console.log('[API] stop_reason:', parsed.stop_reason);
+  if (parsed.content && parsed.content[0]) {
+    console.log('[API] content text length:', (parsed.content[0].text||'').length);
+    console.log('[API] content last 200:', (parsed.content[0].text||'').slice(-200));
+  }
+} catch(e) { console.log('[API] Could not parse response as JSON'); }
         res.writeHead(apiRes.statusCode, {
           'Content-Type':                'application/json',
           'Access-Control-Allow-Origin': '*',
