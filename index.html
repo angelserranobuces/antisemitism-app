@@ -912,7 +912,7 @@ var SYS_PROMPT = (function() {
     "",
     "MANDATORY RULES:",
     "RULE 1 ZERO PROHIBITION: If the edition mentions Israel, Gaza, Hamas, or the Middle East conflict anywhere, a score of 0 for DS, AE, or CO is a scoring error. Minimum DS=1, AE=1, CO=1.",
-    "RULE 2 BASELINE RULE: For editions with any conflict coverage, start DS=2, AE=2, CO=2. Reduce to 1 ONLY if ALL FOUR are explicitly present: (a) October 7 or Israeli hostage mentions, (b) Hamas/Hezbollah attacks described alongside Israeli operations, (c) Israeli casualty figures alongside Palestinian ones, (d) Israeli official statements with equal prominence. Raise to 3 if NONE of these appear.",
+    "RULE 2 BASELINE RULE: For ANY edition mentioning Israel, Gaza, Hamas or the Middle East conflict, assign DS=2, AE=2, CO=2 as mandatory starting scores. These are NOT inflated — they reflect the structural reality of Spanish press coverage. Reduce each to 1 ONLY if that specific balancing element is explicitly present: DS reduces to 1 only if Hamas/Hezbollah actions are given equal column space to Israeli ones. AE reduces to 1 only if Israeli hostages or Israeli victims are named and humanised alongside Palestinian ones. CO reduces to 1 only if October 7 context appears in every article about Israeli military operations. Raise each to 3 if the opposite extreme is present — i.e. zero balancing content at all.",
     "RULE 3 LANGUAGE TRIGGERS: These terms in the edition automatically trigger minimum score of 2 on indicated categories: 'genocidio' triggers HI and D; 'apartheid israeli' triggers HI and DSD; 'limpieza etnica' applied to Israel triggers D and HI; 'masacre' applied exclusively to Israeli actions triggers D and AE; 'bloqueo' without Hamas context triggers CO; 'bombardeos indiscriminados' applied to Israel triggers D.",
     "RULE 4 OPINION COUNTS: Loaded language in opinion columns or editorials counts toward category scores even if news articles are more neutral.",
     "RULE 5 NO ARTIFICIAL INFLATION: CB, CT, HI, DH, DSD require concrete textual evidence to score above 1. The anchored baseline applies specifically to DS, AE, CO.",
@@ -1115,28 +1115,28 @@ function resetTool() {
 
 // ── Word lists ─────────────────────────────────────────────────────────────
 var NEG_WORDS = [
-  { label: 'Lobby judío / lobby proisraelí', terms: ['lobby judío','lobby proisraelí','lobby israelí','lobby pro-israelí'] },
-  { label: 'Doble lealtad', terms: ['doble lealtad','lealtad a israel','lealtad judía'] },
-  { label: 'Mención innecesaria del origen judío', terms: ['el judío','banquero judío','empresario judío','financiero judío','magnate judío'] },
-  { label: 'El poder judío (banca/medios/Hollywood)', terms: ['poder judío','poder israelí','poder sionista','controlan los medios','controlan hollywood','controlan la banca'] },
-  { label: 'Financiado por Soros / mano de Soros', terms: ['financiado por soros','mano de soros','soros financia','dinero de soros','fondos de soros'] },
-  { label: 'Doble rasero exclusivo con Israel', terms: ['único país al que','solo a israel','estándar doble','dos raseros','doble rasero'] },
-  { label: 'Comparaciones con el nazismo', terms: ['nuevos nazis','nazis israelíes','genocidio judío','holocausto palestino','como hitler','igual que los nazis','apartheid israelí'] },
-  { label: 'Negar autodeterminación judía', terms: ['israel no debería existir','israel es ilegítimo','estado ilegítimo','eliminar israel','destruir israel'] },
-  { label: 'Responsabilidad colectiva', terms: ['los judíos deberían','la comunidad judía calla','los judíos callan','judíos responsables','judíos colectivamente'] },
-  { label: 'Tropos económicos / Protocolos', terms: ['usura judía','controlan el mundo','protocolos de sión','protocolos de los sabios','elites judías','oligarquía judía'] },
+  { label: 'Lobby judío / proisraelí', terms: ['lobby judío','lobby proisraelí','lobby israelí','lobby pro-israelí','lobby sionista'] },
+  { label: 'Doble lealtad', terms: ['doble lealtad','lealtad a israel','lealtad judía','quinta columna'] },
+  { label: 'Origen judío innecesario', terms: ['el judío','banquero judío','empresario judío','financiero judío','magnate judío','millonario judío'] },
+  { label: 'Poder judío oculto', terms: ['poder judío','poder sionista','controlan los medios','controlan hollywood','controlan la banca','controlan el mundo','elite judía','élite judía','oligarquía judía'] },
+  { label: 'Soros como código', terms: ['soros','financiado por soros','mano de soros','fondos de soros'] },
+  { label: 'Doble rasero con Israel', terms: ['doble rasero','doble estándar','dos raseros','único país','solo a israel','solo israel'] },
+  { label: 'Comparaciones con el nazismo', terms: ['genocidio','genocida','nazi','nazis','nazismo','holocausto palestino','apartheid israelí','apartheid','limpieza étnica','limpieza etnica','campo de concentración','campos de concentración'] },
+  { label: 'Negar autodeterminación', terms: ['israel no debería existir','estado ilegítimo','eliminar israel','destruir israel','desde el río','desde el rio','palestina libre'] },
+  { label: 'Responsabilidad colectiva', terms: ['los judíos deberían','los judíos callan','judíos responsables','comunidad judía calla','judíos colectivamente'] },
+  { label: 'Demonización / terror', terms: ['estado terrorista','terrorismo de estado','franquicias terroristas','masacre israelí','masacre de israel','crímenes de guerra israelí','bombardeos indiscriminados','bloqueo ilegal'] },
 ];
 var POS_WORDS = [
   { label: 'Judío / judía', terms: ['judío','judía','judíos','judías'] },
-  { label: 'Israel / israelí', terms: ['israel','israelí','israelíes'] },
+  { label: 'Israel / israelí', terms: ['israel','israelí','israelíes','israelita'] },
   { label: 'Sionismo / sionista', terms: ['sionismo','sionista','sionistas'] },
-  { label: 'Semita / semítico', terms: ['semita','semítico','semítica','antisemita','antisemitismo'] },
-  { label: 'Hebreo', terms: ['hebreo','hebrea','hebreos'] },
-  { label: 'Sinagoga / rabino', terms: ['sinagoga','rabino','rabinos','sinagogal'] },
-  { label: 'Torá / Talmud', terms: ['torá','talmud','tóra'] },
-  { label: 'Kosher / cashér', terms: ['kosher','cashér','casher'] },
-  { label: 'Holocausto / Shoá', terms: ['holocausto','shoá','shoah','campos de concentración','auschwitz'] },
-  { label: 'Sefardí / sefardita', terms: ['sefardí','sefardita','sefardíes','sefarditas'] },
+  { label: 'Antisemitismo', terms: ['antisemita','antisemitismo','antisemítico','antisemítica'] },
+  { label: 'Hebreo / semita', terms: ['hebreo','hebrea','hebreos','semita','semítico'] },
+  { label: 'Sinagoga / rabino', terms: ['sinagoga','rabino','rabinos','rabínico'] },
+  { label: 'Torá / Talmud', terms: ['torá','talmud','tóra','torah'] },
+  { label: 'Holocausto / Shoá', terms: ['holocausto','shoá','shoah','auschwitz'] },
+  { label: 'Hamas / Hezbolá', terms: ['hamas','hamás','hezbolá','hezbollah','7 de octubre','7 octubre','rehenes','hostages'] },
+  { label: 'Sefardí / comunidad judía', terms: ['sefardí','sefardita','comunidad judía','diáspora judía'] },
 ];
 
 function countWordsInText(text, terms) {
@@ -1151,24 +1151,27 @@ function countWordsInText(text, terms) {
 }
 
 function computeWordCounts(entry) {
-  // Use pre-computed counts saved at analysis time if available
-  if (entry.negCounts && entry.posCounts) {
-    var negDetail = NEG_WORDS.map(function(w) { return { label: w.label, count: entry.negCounts[w.label] || 0 }; });
-    var posDetail = POS_WORDS.map(function(w) { return { label: w.label, count: entry.posCounts[w.label] || 0 }; });
-    return { neg: entry.negTotal || 0, pos: entry.posTotal || 0, negDetail: negDetail, posDetail: posDetail };
-  }
-  // Fallback: count from evidence+main_drivers text
-  var text = (entry.evidence || '') + ' ' + (entry.main_drivers || '');
   var neg = 0, pos = 0;
   var negDetail = [], posDetail = [];
-  NEG_WORDS.forEach(function(w) {
-    var c = countWordsInText(text, w.terms);
-    neg += c; negDetail.push({ label: w.label, count: c });
-  });
-  POS_WORDS.forEach(function(w) {
-    var c = countWordsInText(text, w.terms);
-    pos += c; posDetail.push({ label: w.label, count: c });
-  });
+
+  if (entry.negCounts && entry.posCounts && (entry.negTotal > 0 || entry.posTotal > 0)) {
+    // Use pre-computed counts from full text analysis
+    negDetail = NEG_WORDS.map(function(w) { return { label: w.label, count: entry.negCounts[w.label] || 0 }; });
+    posDetail = POS_WORDS.map(function(w) { return { label: w.label, count: entry.posCounts[w.label] || 0 }; });
+    neg = entry.negTotal || 0;
+    pos = entry.posTotal || 0;
+  } else {
+    // Compute from evidence + main_drivers (works for all stored entries)
+    var text = (entry.evidence || '') + ' ' + (entry.main_drivers || '') + ' ' + (entry.notes || '');
+    NEG_WORDS.forEach(function(w) {
+      var c = countWordsInText(text, w.terms);
+      neg += c; negDetail.push({ label: w.label, count: c });
+    });
+    POS_WORDS.forEach(function(w) {
+      var c = countWordsInText(text, w.terms);
+      pos += c; posDetail.push({ label: w.label, count: c });
+    });
+  }
   return { neg: neg, pos: pos, negDetail: negDetail, posDetail: posDetail };
 }
 
@@ -1290,11 +1293,20 @@ function populateCompDateSelect(h) {
   var sel = document.getElementById('compDateSelect');
   var cur = sel.value;
   sel.innerHTML = '<option value="">— Select date —</option>';
-  var dates = {};
-  h.forEach(function(e){ dates[e.date]=true; });
-  Object.keys(dates).sort().reverse().forEach(function(d) {
+  // Group by date and collect which newspapers appear on each date
+  var byDate = {};
+  h.forEach(function(e) {
+    if (!byDate[e.date]) byDate[e.date] = [];
+    if (byDate[e.date].indexOf(e.newspaper) === -1) byDate[e.date].push(e.newspaper);
+  });
+  // Only show dates where at least 2 newspapers are present (or all 4)
+  Object.keys(byDate).sort().reverse().forEach(function(d) {
+    var papers = byDate[d];
+    var allFour = papers.length >= 4;
     var opt = document.createElement('option');
-    opt.value = d; opt.textContent = formatDate(d);
+    opt.value = d;
+    opt.textContent = formatDate(d) + ' (' + papers.length + '/4 newspapers' + (allFour ? ' — complete' : '') + ')';
+    if (papers.length < 2) opt.disabled = true;
     sel.appendChild(opt);
   });
   if (cur) sel.value = cur;
