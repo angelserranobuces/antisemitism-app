@@ -241,9 +241,36 @@ tr:hover td { background:var(--surf2); }
 .queue-status.error    { background:var(--red-bg);color:var(--red); }
 .queue-rm { background:none;border:none;cursor:pointer;color:var(--faint);font-size:16px;padding:0 2px;line-height:1;flex-shrink:0; }
 .queue-rm:hover { color:var(--red); }
+
+/* ── Login screen ── */
+#loginScreen { position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center; }
+.login-box { background:var(--surf);border:1px solid var(--border);border-radius:var(--rxl);padding:2.5rem 2rem;width:100%;max-width:360px;text-align:center; }
+.login-logo { width:52px;height:52px;background:var(--p50);border-radius:var(--rmd);display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem; }
+.login-logo svg { width:26px;height:26px;stroke:var(--p400);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round; }
+.login-box h1 { font-size:20px;font-weight:600;color:var(--text);margin-bottom:6px;letter-spacing:-.02em; }
+.login-box p  { font-size:13px;color:var(--muted);margin-bottom:1.75rem; }
+.login-box input[type=password] { width:100%;height:44px;padding:0 14px;border:1px solid var(--border2);border-radius:var(--rmd);font-size:15px;font-family:inherit;color:var(--text);background:var(--surf2);outline:none;text-align:center;letter-spacing:.1em;transition:border-color .15s;box-sizing:border-box; }
+.login-box input[type=password]:focus { border-color:var(--p400); }
+.login-submit { width:100%;height:46px;margin-top:12px;border:none;border-radius:var(--rmd);background:var(--p600);color:#fff;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s; }
+.login-submit:hover { background:var(--p800); }
+.login-error { font-size:13px;color:var(--red);margin-top:10px;min-height:18px; }
 </style>
 </head>
 <body>
+
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">
+      <svg viewBox="0 0 24 24"><path d="M4 4h16v2H4zM4 9h10v2H4zM4 14h16v2H4zM4 19h10v2H4z"/></svg>
+    </div>
+    <h1>Media Framing Risk Analyser</h1>
+    <p>Enter your password to continue</p>
+    <input type="password" id="loginInput" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitLogin()">
+    <button class="login-submit" onclick="submitLogin()">Sign in</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
 <div class="wrap">
 
   <!-- Masthead -->
@@ -509,7 +536,45 @@ tr:hover td { background:var(--surf2); }
 
 </div><!-- /wrap -->
 
-<script>
+<script>// ── Login ──────────────────────────────────────────────────────────────────
+var SESSION_KEY = 'fra_auth_session';
+var CORRECT_HASH = '7f344ee4fc2e9d761b5e0adfd1e2c38c51c1285fbe5d64aabba51b53a08a3fc8'; // SHA-256 of "test2027"
+
+function sha256(str) {
+  // Simple implementation using SubtleCrypto
+  var buf = new TextEncoder().encode(str);
+  return crypto.subtle.digest('SHA-256', buf).then(function(hash) {
+    return Array.from(new Uint8Array(hash)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+  });
+}
+
+function checkAuth() {
+  if (sessionStorage.getItem(SESSION_KEY) === 'authenticated') {
+    document.getElementById('loginScreen').style.display = 'none';
+  }
+}
+
+function submitLogin() {
+  var pwd = document.getElementById('loginInput').value;
+  var errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if (!pwd) { errEl.textContent = 'Please enter the password.'; return; }
+  sha256(pwd).then(function(hash) {
+    if (hash === CORRECT_HASH) {
+      sessionStorage.setItem(SESSION_KEY, 'authenticated');
+      document.getElementById('loginScreen').style.display = 'none';
+    } else {
+      errEl.textContent = 'Incorrect password. Please try again.';
+      document.getElementById('loginInput').value = '';
+      document.getElementById('loginInput').focus();
+    }
+  });
+}
+
+// Check auth immediately on load
+checkAuth();
+
+
 // API key is held securely on the server
 var PAPERS = ['El Mundo','La Razón','ABC','El País'];
 var COLORS = { 'El Mundo':'#F5A623', 'La Razón':'#7ED321', 'ABC':'#E05252', 'El País':'#4A90D9' };
@@ -1069,10 +1134,10 @@ function runQueue() {
 // ── Show result ────────────────────────────────────────────────────────────
 function barColor(s) { if(s<=1)return'#4CAF50'; if(s<=2)return'#FFC107'; if(s<=3)return'#FF7043'; return'#EF5350'; }
 function badgeStyle(f) {
-  if(f<1)  return{label:'No Risk',     bg:'#0D2B0E',color:'#4CAF50'};
-  if(f<2)  return{label:'Low',         bg:'#0D2B0E',color:'#7ED321'};
-  if(f<3)  return{label:'Moderate',    bg:'#2B2100',color:'#FFC107'};
-  if(f<4)  return{label:'High',        bg:'#2B1200',color:'#FF7043'};
+  if(f<0.5) return{label:'No Risk',     bg:'#0D2B0E',color:'#4CAF50'};
+  if(f<1.0) return{label:'Low',         bg:'#0D2B0E',color:'#7ED321'};
+  if(f<2.0) return{label:'Moderate',    bg:'#2B2100',color:'#FFC107'};
+  if(f<3.5) return{label:'High',        bg:'#2B1200',color:'#FF7043'};
   return        {label:'Very High',    bg:'#2B0A0A',color:'#EF5350'};
 }
 function formatDate(d) { if(!d)return''; var p=d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
@@ -1364,11 +1429,11 @@ function downloadComparisonReport() {
 
   rows.forEach(function(e) {
     var col = paperColorMap[e.newspaper] || '#7F77DD';
-    var bs = e.frs < 1 ? {label:'No Risk',bg:'#EAF3DE',col:'#27500A'} :
-             e.frs < 2 ? {label:'Low',bg:'#EAF3DE',col:'#27500A'} :
-             e.frs < 3 ? {label:'Moderate',bg:'#FAEEDA',col:'#633806'} :
-             e.frs < 4 ? {label:'High',bg:'#FAECE7',col:'#712B13'} :
-                         {label:'Very High',bg:'#FCEBEB',col:'#791F1F'};
+    var bs = e.frs < 0.5 ? {label:'No Risk',  bg:'#EAF3DE',col:'#27500A'} :
+             e.frs < 1.0 ? {label:'Low',       bg:'#EAF3DE',col:'#27500A'} :
+             e.frs < 2.0 ? {label:'Moderate',  bg:'#FAEEDA',col:'#633806'} :
+             e.frs < 3.5 ? {label:'High',      bg:'#FAECE7',col:'#712B13'} :
+                           {label:'Very High', bg:'#FCEBEB',col:'#791F1F'};
     html += '<div class="card" style="--col:'+col+';border-top-color:'+col+'">';
     html += '<div class="paper" style="color:'+col+'">'+e.newspaper+'</div>';
     html += '<div class="frs" style="color:'+col+'">'+e.frs.toFixed(2)+'</div>';
