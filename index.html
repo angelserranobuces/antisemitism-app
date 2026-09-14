@@ -834,10 +834,12 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
   var controller = new AbortController();
   var fetchTimeout = setTimeout(function(){ controller.abort(); }, 120000);
 
+  var bodyStr = JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:8000, system:sys, messages:messages });
+  console.log('[CLIENT] Request body size:', Math.round(bodyStr.length/1024), 'KB');
   return fetch('/api/messages', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:8000, system:sys, messages:messages }),
+    body: bodyStr,
     signal: controller.signal
   })
   .then(function(res) {
@@ -1585,10 +1587,17 @@ function renderChart(h) {
     });
     if(pts.length<1) return;
     if(pts.length>=2){
-      var da=pts.map(function(p,i){ return (i===0?'M':'L')+p.x+' '+p.y; }).join(' ');
+      // Build smooth curved path using cubic bezier control points
+      var da = 'M'+pts[0].x+' '+pts[0].y;
+      for(var pi=1; pi<pts.length; pi++){
+        var prev = pts[pi-1], curr = pts[pi];
+        var cpx = (prev.x + curr.x) / 2;
+        // Control points at horizontal midpoint — creates smooth S-curve
+        da += ' C'+cpx+' '+prev.y+' '+cpx+' '+curr.y+' '+curr.x+' '+curr.y;
+      }
       var path=document.createElementNS('http://www.w3.org/2000/svg','path');
       path.setAttribute('d',da);path.setAttribute('fill','none');path.setAttribute('stroke',col);path.setAttribute('stroke-width','2.5');
-      path.setAttribute('stroke-linejoin','round');path.setAttribute('stroke-linecap','round');
+      path.setAttribute('stroke-linecap','round');
       svg.appendChild(path);
     }
     pts.forEach(function(p){
