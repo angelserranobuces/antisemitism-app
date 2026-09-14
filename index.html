@@ -582,30 +582,9 @@ var STORAGE_KEY = 'framing_risk_history_v2';
 var b64 = null;
 var fileIsTxt = false;
 
-// ── Storage ────────────────────────────────────────────────────────────────
-function loadHistory() {
-  try {
-    var OLD_KEYS = ['framing_risk_history', 'framing_risk_history_v1'];
-    OLD_KEYS.forEach(function(k) {
-      var old = localStorage.getItem(k);
-      if (old) {
-        try {
-          var oldData = JSON.parse(old);
-          if (oldData && oldData.length) {
-            var cur = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-            var ids = {}; cur.forEach(function(e){ ids[e.id]=true; });
-            oldData.forEach(function(e){ if(!ids[e.id]) cur.push(e); });
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(cur));
-          }
-        } catch(e2){}
-        localStorage.removeItem(k);
-      }
-    });
-    var data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    // Compress any existing oversized entries
-    return data.map(compressEntry);
-  } catch(e) { return []; }
-}
+// ── Storage — server-side, shared across all devices ──────────────────────
+var serverHistory = [];
+
 function compressEntry(e) {
   return {
     id:          e.id,
@@ -621,31 +600,49 @@ function compressEntry(e) {
     posCounts:   e.posCounts  || {},
     negTotal:    e.negTotal   || 0,
     posTotal:    e.posTotal   || 0
-    // rawText excluded — too large for localStorage
   };
 }
 
-function saveHistory(h) {
-  var toSave = h.map(compressEntry);
-  var json = JSON.stringify(toSave);
-  try {
-    localStorage.setItem(STORAGE_KEY, json);
-  } catch(err) {
-    // Storage full — remove oldest entries until it fits
-    console.warn('localStorage full, trimming oldest entries...');
-    var trimmed = toSave.slice();
-    while (trimmed.length > 0) {
-      trimmed.shift(); // remove oldest
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-        showError('Storage limit reached — ' + (toSave.length - trimmed.length) + ' oldest record(s) were removed to make space. Export your data regularly using the Downloads tab.');
-        break;
-      } catch(err2) {
-        // keep trimming
-      }
-    }
-  }
+function loadHistory() { return serverHistory; }
+
+function fetchHistory() {
+  fetch('/api/history')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      serverHistory = Array.isArray(data) ? data : [];
+      renderAll();
+    })
+    .catch(function(e){ console.warn('Could not load history:', e.message); renderAll(); });
 }
+
+function saveEntry(entry) {
+  var compressed = compressEntry(entry);
+  serverHistory = serverHistory.filter(function(e){ return String(e.id) !== String(entry.id); });
+  serverHistory.push(compressed);
+  fetch('/api/history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(compressed)
+  }).catch(function(e){ console.warn('Could not save entry:', e.message); });
+}
+
+function saveHistory(h) { serverHistory = h; }
+
+function deleteEntryServer(id) {
+  serverHistory = serverHistory.filter(function(e){ return String(e.id) !== String(id); });
+  fetch('/api/history/' + encodeURIComponent(String(id)), { method: 'DELETE' })
+    .catch(function(e){ console.warn('Could not delete:', e.message); });
+  renderAll();
+}
+
+function clearAllServer() {
+  if (!confirm('Delete all records? This cannot be undone.')) return;
+  serverHistory = [];
+  fetch('/api/history', { method: 'DELETE' })
+    .catch(function(e){ console.warn('Could not clear:', e.message); });
+  renderAll();
+}
+
 
 // ── Queue state ────────────────────────────────────────────────────────────
 var fileQueue = [];   // [{id, file, name, newspaper, date, isTxt, data, status}]
@@ -655,7 +652,6 @@ var isProcessing = false;
 document.addEventListener('DOMContentLoaded', function() {
   fetchHistory();
   document.getElementById('analyseBtn').addEventListener('click', runQueue);
-  renderAll();
 });
 
 function handleFileInputChange(input) {
