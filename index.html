@@ -538,15 +538,6 @@ tr:hover td { background:var(--surf2); }
 
 <script>// ── Login ──────────────────────────────────────────────────────────────────
 var SESSION_KEY = 'fra_auth_session';
-var CORRECT_HASH = '7f344ee4fc2e9d761b5e0adfd1e2c38c51c1285fbe5d64aabba51b53a08a3fc8'; // SHA-256 of "test2027"
-
-function sha256(str) {
-  // Simple implementation using SubtleCrypto
-  var buf = new TextEncoder().encode(str);
-  return crypto.subtle.digest('SHA-256', buf).then(function(hash) {
-    return Array.from(new Uint8Array(hash)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
-  });
-}
 
 function checkAuth() {
   if (sessionStorage.getItem(SESSION_KEY) === 'authenticated') {
@@ -559,16 +550,14 @@ function submitLogin() {
   var errEl = document.getElementById('loginError');
   errEl.textContent = '';
   if (!pwd) { errEl.textContent = 'Please enter the password.'; return; }
-  sha256(pwd).then(function(hash) {
-    if (hash === CORRECT_HASH) {
-      sessionStorage.setItem(SESSION_KEY, 'authenticated');
-      document.getElementById('loginScreen').style.display = 'none';
-    } else {
-      errEl.textContent = 'Incorrect password. Please try again.';
-      document.getElementById('loginInput').value = '';
-      document.getElementById('loginInput').focus();
-    }
-  });
+  if (pwd === atob('dGVzdDIwMjc=')) {
+    sessionStorage.setItem(SESSION_KEY, 'authenticated');
+    document.getElementById('loginScreen').style.display = 'none';
+  } else {
+    errEl.textContent = 'Incorrect password. Please try again.';
+    document.getElementById('loginInput').value = '';
+    document.getElementById('loginInput').focus();
+  }
 }
 
 // Check auth immediately on load
