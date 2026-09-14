@@ -606,6 +606,30 @@ document.addEventListener('DOMContentLoaded', function() {
 function handleFileInputChange(input) {
   if (input.files && input.files.length > 0) {
     addFilesToQueue(Array.from(input.files));
+    // Pre-read TXT files and compute word counts immediately
+    fileQueue.forEach(function(item) {
+      if (item.isTxt && item.file && !item.wordCountsDone) {
+        (function(qItem) {
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            var text = e.target.result;
+            qItem.preloadedText = text;
+            qItem.wordCountsDone = true;
+            qItem.negCounts = {}; qItem.posCounts = {};
+            qItem.negTotal = 0; qItem.posTotal = 0;
+            NEG_WORDS.forEach(function(w) {
+              var c = countWordsInText(text, w.terms);
+              qItem.negCounts[w.label] = c; qItem.negTotal += c;
+            });
+            POS_WORDS.forEach(function(w) {
+              var c = countWordsInText(text, w.terms);
+              qItem.posCounts[w.label] = c; qItem.posTotal += c;
+            });
+          };
+          reader.readAsText(qItem.file);
+        })(item);
+      }
+    });
     input.value = '';
   }
 }
@@ -758,7 +782,32 @@ function onDragOver(e) { e.preventDefault(); document.getElementById('dropzone')
 function onDragLeave()  { document.getElementById('dropzone').classList.remove('drag'); }
 function onDrop(e) {
   e.preventDefault(); document.getElementById('dropzone').classList.remove('drag');
-  addFilesToQueue(Array.from(e.dataTransfer.files));
+  var files = Array.from(e.dataTransfer.files);
+  addFilesToQueue(files);
+  // Pre-read TXT files for word counting
+  fileQueue.forEach(function(item) {
+    if (item.isTxt && item.file && !item.wordCountsDone) {
+      (function(qItem) {
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          var text = ev.target.result;
+          qItem.preloadedText = text;
+          qItem.wordCountsDone = true;
+          qItem.negCounts = {}; qItem.posCounts = {};
+          qItem.negTotal = 0; qItem.posTotal = 0;
+          NEG_WORDS.forEach(function(w) {
+            var c = countWordsInText(text, w.terms);
+            qItem.negCounts[w.label] = c; qItem.negTotal += c;
+          });
+          POS_WORDS.forEach(function(w) {
+            var c = countWordsInText(text, w.terms);
+            qItem.posCounts[w.label] = c; qItem.posTotal += c;
+          });
+        };
+        reader.readAsText(qItem.file);
+      })(item);
+    }
+  });
 }
 
 // ── API helper ─────────────────────────────────────────────────────────────
@@ -834,10 +883,54 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
 }
 
 // ── Analyse queue ──────────────────────────────────────────────────────────
-var SYS_PROMPT = 'You are an expert IHRA-trained media analyst with deep knowledge of antisemitic framing patterns in Spanish-language press. Your task is to assess antisemitic framing risk in a Spanish newspaper edition using the Framing Risk Score (FRS) methodology.\n\nFRS = (CB*0.20)+(CT*0.20)+(HI*0.15)+(D*0.10)+(DSD*0.10)+(DS*0.10)+(DH*0.05)+(AE*0.05)+(CO*0.05)\nAll category scores are 0-5. FRS result is on the 0-5 scale.\n\nCATEGORY DEFINITIONS WITH SPANISH-PRESS EXAMPLES:\n\nCB — Collective Blame (20%): Attributing Israeli government actions to ALL Jewish people globally. Examples: "los judíos bombardean Gaza", holding diaspora Jews responsible for IDF actions, implying Jewish communities worldwide share guilt for Israeli policy.\n\nCT — Conspiracy Tropes (20%): Hidden Jewish/Israeli control narratives. Examples: "el lobby judío controla Washington", "la mano de Soros", "los medios controlados por Israel", dual loyalty accusations against Jewish politicians, framing Israel as pulling strings behind world events.\n\nHI — Holocaust Inversion (15%): Comparing Israel/Zionism to Nazism, inverting historical victim/perpetrator roles. Examples: "Israel hace lo mismo que los nazis", "el nuevo Holocausto palestino", calling Gaza "un campo de concentración", "genocidio" used to equate Israeli policy with Nazi extermination.\n\nD — Demonisation (10%): Framing Israel or Jews as uniquely evil, monstrous, or satanic beyond legitimate political criticism. Examples: "Israel, el Estado terrorista", "franquicias terroristas israelíes", "la bestia sionista", portraying Israel as having no legitimate security concerns whatsoever, uniquely evil framing not applied to any other state.\n\nDSD — Denial of Self-Determination (10%): Framing Israel\'s existence itself as illegitimate (distinct from criticising specific policies). Examples: "Israel es un Estado colonial que no debería existir", treating the existence of a Jewish state as inherently illegitimate in a way not applied to any other state, calls to eliminate Israel as a Jewish state.\n\nDS — Double Standards (10%): Applying demands, scrutiny or moral standards to Israel/Jews that are never applied to comparable actors. Examples: demanding Israel justify every military action while ignoring Hamas, Iran, Russia doing the same; "Israel, el único país que..."; covering Israeli strikes in detail while ignoring rocket attacks on Israel; demanding Jewish communities condemn Israeli actions in a way no other diaspora is asked to condemn their government.\n\nDH — Dehumanisation (5%): Language reducing Israelis or Jewish people to non-human categories. Examples: comparing Israeli soldiers to animals, describing settlers as "colonos-parásitos", pest/disease metaphors applied to Jewish people or Israel.\n\nAE — Asymmetric Empathy (5%): Exclusively humanising Palestinian victims while systematically making Israeli/Jewish victims invisible. Examples: detailed reporting of Palestinian casualties with names and stories, zero mention of Israeli hostages or victims of Hamas attacks, no Israeli perspective included anywhere in coverage of the conflict.\n\nCO — Contextual Omission (5%): Omitting context essential to understand Israeli actions. Examples: reporting Israeli strikes without mentioning the rockets that preceded them, covering Gaza without mentioning October 7th attacks or hostages, omitting Hamas\'s stated goal of eliminating Israel, presenting Israeli security measures without the attacks that prompted them.\n\nSCORING — apply these thresholds strictly:\n0 = Completely absent. Zero trace in the entire edition.\n1 = Minimal. One isolated instance, could be unintentional editorial shorthand.\n2 = Mild pattern. Appears 2-3 times, suggests a framing tendency.\n3 = Moderate. Recurring across multiple articles or sections of the edition.\n4 = Significant. A defining feature of how the edition frames Israel/Jewish topics.\n5 = Pervasive. Dominates coverage throughout, overt and sustained.\n\nCRITICAL SCORING RULES:\n— A score of 0.00 across ALL categories is ONLY appropriate when the edition contains ZERO content about Israel, Gaza, Jews, the Middle East conflict, or any related topic. If ANY such content exists, at minimum DS, AE, and CO should be scored.\n— Spanish newspapers that cover the Israel-Gaza conflict almost always have at least DS=1, AE=1, CO=1 due to structural patterns in how the conflict is reported in Spain.\n— Do NOT give 0 to DS, AE, or CO unless you have specifically confirmed the edition contains balanced reporting that includes: Israeli casualty figures, Hamas attack context, October 7 references, AND Israeli official statements. Absence of any of these warrants at minimum CO=1.\n— A score of 1 does not mean "antisemitic" — it means a framing pattern exists at a minimal level. Be willing to score 1 on multiple categories for normal coverage of the conflict.\n— The FRS is a RISK indicator, not a finding of fact. Scores should reflect framing patterns, not proven intent.\n\nConfidence: High = explicit repeated evidence; Medium = clear pattern with some ambiguity; Low = isolated or ambiguous evidence.\n\nRespond ONLY with valid JSON, no markdown fences, no preamble:\n{"scores":{"CB":0,"CT":0,"HI":0,"D":0,"DSD":0,"DS":0,"DH":0,"AE":0,"CO":0},"frs":0.0,"confidence":"Medium","evidence":"3-5 sentences citing specific headlines, phrases, and editorial choices with page/section references where possible.","main_drivers":"Detailed narrative of the main framing patterns driving the score. For each non-zero category explain exactly what in the text triggered it."}';
-
+var SYS_PROMPT = (function() {
+  var lines = [
+    "You are an expert IHRA-trained media analyst specialising in antisemitic framing in Spanish-language press.",
+    "Apply the Framing Risk Score (FRS) methodology to the newspaper edition provided.",
+    "",
+    "FRS = (CB*0.20)+(CT*0.20)+(HI*0.15)+(D*0.10)+(DSD*0.10)+(DS*0.10)+(DH*0.05)+(AE*0.05)+(CO*0.05)",
+    "All scores 0-5. FRS result is on the 0-5 scale.",
+    "",
+    "CATEGORIES:",
+    "CB (20%) Collective Blame: Attributing Israeli state actions to all Jews globally. Holding diaspora Jews responsible for IDF decisions. Using 'los judios' as subject of Israeli state actions.",
+    "CT (20%) Conspiracy Tropes: Hidden Jewish/Israeli control narratives, dual loyalty accusations, 'el lobby judio controla Washington', 'la mano de Soros', framing Israeli influence as covert coordination.",
+    "HI (15%) Holocaust Inversion: Comparing Israel to Nazis. 'Israel hace lo mismo que los nazis', 'Holocausto palestino', Gaza as 'campo de concentracion', 'genocidio' equating Israeli policy with Nazi extermination, apartheid comparisons that invert victim/perpetrator.",
+    "D (10%) Demonisation: Framing Israel as uniquely evil beyond legitimate criticism. 'Estado terrorista israeli', 'franquicias terroristas', portraying Israel as having zero legitimate security concerns, moral exceptionalism applied only to Israel.",
+    "DSD (10%) Denial of Self-Determination: Framing Israel's existence as uniquely illegitimate. Treating Israel as a colonial project with no right to exist, calls to dismantle the Jewish state.",
+    "DS (10%) Double Standards: THIS IS THE MOST COMMON INDICATOR. Asymmetric scrutiny applied only to Israel — reporting Israeli operations in detail while ignoring Hamas/Hezbollah attacks; demanding Israeli justification never asked of other states in conflict; asymmetric headline framing that holds Israel to account while treating adversaries as passive.",
+    "DH (5%) Dehumanisation: Sub-human language for Israelis or Jews. Animal metaphors, pest/disease language applied to Jewish people or Israeli soldiers.",
+    "AE (5%) Asymmetric Empathy: THIS IS THE SECOND MOST COMMON INDICATOR. Naming and profiling Palestinian casualties while Israeli victims are absent or statistics; zero mention of Israeli hostages alongside Palestinian civilian reporting; no Israeli human perspective in conflict articles.",
+    "CO (5%) Contextual Omission: THIS IS THE THIRD MOST COMMON INDICATOR. Israeli strikes reported without mentioning rockets or attacks that prompted them; no October 7 reference in articles about Israeli operations; Hamas goals unmentioned; Israeli security measures presented as unprovoked.",
+    "",
+    "ANCHORED SCORING SCALE CALIBRATED FOR SPANISH PRESS:",
+    "0 = PROHIBITED for DS, AE, CO when ANY Israel/Gaza/Hamas/Middle East content exists in the edition. Only valid for editions with zero relevant content across all pages.",
+    "1 = Minimal. One isolated instance. MINIMUM score for DS, AE, CO whenever any conflict coverage exists and full contextual balance is absent.",
+    "2 = EXPECTED BASELINE for DS, AE, CO in typical Spanish press coverage of the Israel-Gaza conflict. Spanish newspapers structurally present Palestinian casualties more prominently than Israeli ones and rarely include October 7 context in every article. Assign 2 as default and adjust.",
+    "3 = Moderate and consistent. The indicator recurs across multiple articles or defines the editorial stance of the edition. Expected for editions with prominent front-page Israel coverage, opinion columns using loaded language, or systematic one-sided framing across sections.",
+    "4 = Significant. A defining feature of the edition's identity — prominent repeated framing across news and opinion sections.",
+    "5 = Pervasive. Dominates the entire edition. Reserve for the most extreme cases only.",
+    "",
+    "MANDATORY RULES:",
+    "RULE 1 ZERO PROHIBITION: If the edition mentions Israel, Gaza, Hamas, or the Middle East conflict anywhere, a score of 0 for DS, AE, or CO is a scoring error. Minimum DS=1, AE=1, CO=1.",
+    "RULE 2 BASELINE RULE: For editions with any conflict coverage, start DS=2, AE=2, CO=2. Reduce to 1 ONLY if ALL FOUR are explicitly present: (a) October 7 or Israeli hostage mentions, (b) Hamas/Hezbollah attacks described alongside Israeli operations, (c) Israeli casualty figures alongside Palestinian ones, (d) Israeli official statements with equal prominence. Raise to 3 if NONE of these appear.",
+    "RULE 3 LANGUAGE TRIGGERS: These terms in the edition automatically trigger minimum score of 2 on indicated categories: 'genocidio' triggers HI and D; 'apartheid israeli' triggers HI and DSD; 'limpieza etnica' applied to Israel triggers D and HI; 'masacre' applied exclusively to Israeli actions triggers D and AE; 'bloqueo' without Hamas context triggers CO; 'bombardeos indiscriminados' applied to Israel triggers D.",
+    "RULE 4 OPINION COUNTS: Loaded language in opinion columns or editorials counts toward category scores even if news articles are more neutral.",
+    "RULE 5 NO ARTIFICIAL INFLATION: CB, CT, HI, DH, DSD require concrete textual evidence to score above 1. The anchored baseline applies specifically to DS, AE, CO.",
+    "",
+    "Confidence: High=explicit repeated unambiguous evidence, Medium=clear pattern with some ambiguity, Low=single or ambiguous instance.",
+    "",
+    "Respond ONLY with a valid JSON object. No markdown fences, no preamble:",
+    '{"scores":{"CB":0,"CT":0,"HI":0,"D":0,"DSD":0,"DS":0,"DH":0,"AE":0,"CO":0},"frs":0.0,"confidence":"Medium","evidence":"3-5 sentences citing specific headlines, article titles and editorial choices.","main_drivers":"For each non-zero category explain what evidence triggered that score with direct references to the text."}'
+  ];
+  return lines.join("\n");
+})();
 function readFileData(item) {
   return new Promise(function(resolve, reject) {
+    // Use preloaded text if already read
+    if (item.isTxt && item.preloadedText) {
+      item.data = item.preloadedText;
+      resolve(); return;
+    }
     var reader = new FileReader();
     if (item.isTxt) {
       reader.onload = function(e) { item.data = e.target.result; resolve(); };
@@ -923,34 +1016,37 @@ function runQueue() {
         safeScores[c.key] = (result.scores && typeof result.scores[c.key] === 'number') ? result.scores[c.key] : 0;
       });
       var frs = (typeof result.frs==='number'&&!isNaN(result.frs)) ? result.frs : CATS.reduce(function(a,c){return a+safeScores[c.key]*c.w;},0);
-      // Compute word counts now while we have the full text, and save them in the entry
-      var rawText = item.isTxt ? (item.data || '') : '';
-      var textForCounting = rawText.length > 100 ? rawText : (result.evidence||'') + ' ' + (result.main_drivers||'');
-      var negCounts = {}, posCounts = {};
-      var negTotal = 0, posTotal = 0;
-      NEG_WORDS.forEach(function(w) {
-        var c = countWordsInText(textForCounting, w.terms);
-        negCounts[w.label] = c; negTotal += c;
-      });
-      POS_WORDS.forEach(function(w) {
-        var c = countWordsInText(textForCounting, w.terms);
-        posCounts[w.label] = c; posTotal += c;
-      });
-      var entry = { 
-        id: Date.now()+'_'+idx, 
-        date: item.date, 
-        newspaper: item.newspaper, 
-        frs: parseFloat(frs.toFixed(2)), 
-        confidence: result.confidence || 'Medium', 
-        evidence: result.evidence || '', 
-        main_drivers: result.main_drivers || result.evidence || '', 
-        scores: safeScores, 
-        notes: '',
-        negCounts: negCounts,
-        posCounts: posCounts,
-        negTotal: negTotal,
-        posTotal: posTotal
-        // rawText NOT saved — too large for localStorage
+      // Use pre-computed word counts from file load, or compute now from full text
+      var negCounts = item.negCounts || {};
+      var posCounts = item.posCounts || {};
+      var negTotal  = item.negTotal  || 0;
+      var posTotal  = item.posTotal  || 0;
+      if (!item.wordCountsDone) {
+        // Fallback: count from evidence+main_drivers if no preloaded counts
+        var fallbackText = (result.evidence||'') + ' ' + (result.main_drivers||'');
+        NEG_WORDS.forEach(function(w) {
+          var c = countWordsInText(fallbackText, w.terms);
+          negCounts[w.label] = c; negTotal += c;
+        });
+        POS_WORDS.forEach(function(w) {
+          var c = countWordsInText(fallbackText, w.terms);
+          posCounts[w.label] = c; posTotal += c;
+        });
+      }
+      var entry = {
+        id:          Date.now()+'_'+idx,
+        date:        item.date,
+        newspaper:   item.newspaper,
+        frs:         parseFloat(frs.toFixed(2)),
+        confidence:  result.confidence || 'Medium',
+        evidence:    result.evidence || '',
+        main_drivers:result.main_drivers || result.evidence || '',
+        scores:      safeScores,
+        notes:       '',
+        negCounts:   negCounts,
+        posCounts:   posCounts,
+        negTotal:    negTotal,
+        posTotal:    posTotal
       };
       var h = loadHistory(); h.push(entry); saveHistory(h);
       setQueueItemStatus(item.id, 'done');
