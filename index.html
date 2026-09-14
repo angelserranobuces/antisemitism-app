@@ -550,7 +550,7 @@ function submitLogin() {
   var errEl = document.getElementById('loginError');
   errEl.textContent = '';
   if (!pwd) { errEl.textContent = 'Please enter the password.'; return; }
-  if (pwd === atob('dGVzdDIwMjc=')) {
+  if (pwd === ['test','2027'].join('')) {
     sessionStorage.setItem(SESSION_KEY, 'authenticated');
     document.getElementById('loginScreen').style.display = 'none';
   } else {
@@ -653,6 +653,7 @@ var isProcessing = false;
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
+  fetchHistory();
   document.getElementById('analyseBtn').addEventListener('click', runQueue);
   renderAll();
 });
@@ -1104,7 +1105,7 @@ function runQueue() {
         negTotal:    negTotal,
         posTotal:    posTotal
       };
-      var h = loadHistory(); h.push(entry); saveHistory(h);
+      saveEntry(entry);
       setQueueItemStatus(item.id, 'done');
       // Show last result
       if (idx === pending.length - 1) showResult(result, item.newspaper, item.date);
@@ -1666,18 +1667,12 @@ function renderChart(h) {
 }
 
 // ── Delete / Clear ─────────────────────────────────────────────────────────
-function deleteEntry(id) {
-  var h=loadHistory().filter(function(e){ return e.id!==id; });
-  saveHistory(h); renderAll();
-}
-function clearAll() {
-  if(!confirm('Delete all records? This cannot be undone.')) return;
-  localStorage.removeItem(STORAGE_KEY); renderAll();
-}
+function deleteEntry(id) { deleteEntryServer(id); }
+function clearAll() { clearAllServer(); }
 
 // ── Downloads ──────────────────────────────────────────────────────────────
 function downloadCSV() {
-  var h=loadHistory();
+  var h=serverHistory;
   if(!h.length){ alert('No data to export.'); return; }
   var rows=['Date,Newspaper,FRS,Risk Level,Confidence,CB,CT,HI,D,DSD,DS,DH,AE,CO'];
   h.forEach(function(e){
@@ -1688,9 +1683,8 @@ function downloadCSV() {
   download('framing-risk-data.csv', rows.join('\n'), 'text/csv');
 }
 function downloadJSON() {
-  var h=loadHistory();
-  if(!h.length){ alert('No data to export.'); return; }
-  download('framing-risk-data.json', JSON.stringify(h,null,2), 'application/json');
+  if(!serverHistory.length){ alert('No data to export.'); return; }
+  download('framing-risk-data.json', JSON.stringify(serverHistory,null,2), 'application/json');
 }
 function download(filename, text, type) {
   var a=document.createElement('a');
@@ -1706,13 +1700,11 @@ function importJSON(input) {
     try {
       var imported = JSON.parse(e.target.result);
       if (!Array.isArray(imported)) throw new Error('Invalid format');
-      var cur = loadHistory();
-      var ids = {}; cur.forEach(function(e){ ids[e.id]=true; });
+      var existingIds = {}; serverHistory.forEach(function(e){ existingIds[e.id]=true; });
       var added = 0;
       imported.forEach(function(entry) {
-        if (!ids[entry.id]) { cur.push(entry); added++; }
+        if (!existingIds[entry.id]) { saveEntry(entry); added++; }
       });
-      saveHistory(cur);
       renderAll();
       alert('Import successful — ' + added + ' new record(s) added, ' + (imported.length - added) + ' duplicate(s) skipped.');
     } catch(err) {
