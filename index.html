@@ -885,7 +885,7 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
   var controller = new AbortController();
   var fetchTimeout = setTimeout(function(){ controller.abort(); }, 120000);
 
-  var bodyStr = JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:8000, system:sys, messages:messages });
+  var bodyStr = JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:4096, system:sys, messages:messages });
   console.log('[CLIENT] Request body size:', Math.round(bodyStr.length/1024), 'KB');
   return fetch('/api/messages', {
     method:'POST',
@@ -897,7 +897,7 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
     clearTimeout(fetchTimeout);
     if (!res.ok) return res.json().then(function(e){
       var msg = e.error ? e.error.message : 'HTTP '+res.status;
-      // Include HTTP status in error for better debugging
+      console.error('[API ERROR]', res.status, JSON.stringify(e));
       throw new Error('[HTTP '+res.status+'] '+msg);
     });
     return res.json();
