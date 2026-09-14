@@ -1179,6 +1179,7 @@ function computeWordCounts(entry) {
 function renderPillarBars(h) {
   var el = document.getElementById('pillarBars');
   var empty = document.getElementById('emptyPillarBars');
+  if (!el || !empty) return;
   el.innerHTML = '';
   if (!h.length) { empty.style.display='block'; return; }
   empty.style.display='none';
@@ -1217,6 +1218,7 @@ function renderWordBars(h) {
   var emptyPos=document.getElementById('emptyPosWords');
   var tblBody=document.getElementById('wordTableBody');
   var emptyTbl=document.getElementById('emptyWordTable');
+  if (!negEl || !posEl || !tblBody || !emptyNeg || !emptyPos || !emptyTbl) return;
   negEl.innerHTML=''; posEl.innerHTML=''; tblBody.innerHTML='';
 
   if (!h.length) {
@@ -1274,19 +1276,23 @@ function renderWordBars(h) {
 }
 
 // ── Render all views ───────────────────────────────────────────────────────
+function safeRender(fn, arg) {
+  try { arg !== undefined ? fn(arg) : fn(); } catch(e) { console.warn('Render error in '+fn.name+':', e.message); }
+}
+
 function renderAll() {
   var h = loadHistory();
   h.sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:0; });
-  renderCards(h);
-  renderLegend();
-  renderChart(h);
-  renderTable(h);
-  renderMatrix(h);
-  renderPillarBars(h);
-  renderRanking(h);
-  renderEvidence(h);
-  renderWordBars(h);
-  populateCompDateSelect(h);
+  safeRender(renderCards, h);
+  safeRender(renderLegend);
+  safeRender(renderChart, h);
+  safeRender(renderTable, h);
+  safeRender(renderMatrix, h);
+  safeRender(renderPillarBars, h);
+  safeRender(renderRanking, h);
+  safeRender(renderEvidence, h);
+  safeRender(renderWordBars, h);
+  safeRender(populateCompDateSelect, h);
 }
 
 function populateCompDateSelect(h) {
@@ -1398,6 +1404,7 @@ function renderCards(h) {
   var grid=document.getElementById('npGrid');
   var empty=document.getElementById('npEmpty');
   var cb=document.getElementById('clearAllBtn');
+  if(!grid||!empty||!cb) return;
   grid.innerHTML='';
   if(h.length===0){ empty.style.display='block'; cb.style.display='none'; return; }
   empty.style.display='none'; cb.style.display='inline-block';
@@ -1421,7 +1428,7 @@ function renderCards(h) {
 
 // ── Legend ─────────────────────────────────────────────────────────────────
 function renderLegend() {
-  var leg=document.getElementById('legend'); leg.innerHTML='';
+  var leg=document.getElementById('legend'); if(!leg) return; leg.innerHTML='';
   PAPERS.forEach(function(p){
     var d=document.createElement('div'); d.className='leg-item';
     d.innerHTML='<span class="leg-dot" style="background:'+COLORS[p]+'"></span>'+p;
@@ -1433,6 +1440,7 @@ function renderLegend() {
 function renderTable(h) {
   var tbody=document.getElementById('histBody');
   var empty=document.getElementById('emptyHist');
+  if(!tbody||!empty) return;
   tbody.innerHTML='';
   if(h.length===0){ empty.style.display='block'; return; }
   empty.style.display='none';
@@ -1454,6 +1462,8 @@ function renderMatrix(h) {
   var head=document.getElementById('matrixHead');
   var body=document.getElementById('matrixBody');
   var empty=document.getElementById('emptyMatrix');
+  var emptyM=document.getElementById('emptyMatrix');
+  if(!head||!body) return;
   head.innerHTML=''; body.innerHTML='';
   if(h.length===0){ empty.style.display='block'; return; }
   empty.style.display='none';
@@ -1479,6 +1489,7 @@ function renderMatrix(h) {
 function renderRanking(h) {
   var list=document.getElementById('rankingList');
   var empty=document.getElementById('emptyRanking');
+  if(!list || !empty) return;
   list.innerHTML='';
   if(h.length===0){ empty.style.display='block'; return; }
   empty.style.display='none';
@@ -1508,6 +1519,7 @@ function renderRanking(h) {
 function renderEvidence(h) {
   var list=document.getElementById('evidenceList');
   var empty=document.getElementById('emptyEvidence');
+  if(!list || !empty) return;
   list.innerHTML='';
   if(h.length===0){ empty.style.display='block'; return; }
   empty.style.display='none';
@@ -1529,7 +1541,7 @@ function renderEvidence(h) {
 
 // ── Chart ──────────────────────────────────────────────────────────────────
 function renderChart(h) {
-  var svg=document.getElementById('frsChart'); svg.innerHTML='';
+  var svg=document.getElementById('frsChart'); if(!svg) return; svg.innerHTML='';
   var W=760,H=280,padL=44,padR=24,padT=20,padB=52;
   var cW=W-padL-padR, cH=H-padT-padB;
   if(h.length===0){
