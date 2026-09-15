@@ -1050,7 +1050,7 @@ function runQueue() {
             if (scoresMatch || frsMatch) {
               result = {
                 scores: scoresMatch ? JSON.parse(scoresMatch[1]) : {},
-                frs: frsMatch ? parseFloat(frsMatch[1]) : 0,
+                frs: null, // will be recalculated from scores
                 confidence: confMatch ? confMatch[1] : 'Low',
                 evidence: evMatch ? evMatch[1] : 'Response was truncated.',
                 main_drivers: 'Response was truncated — partial analysis only.'
@@ -1068,7 +1068,9 @@ function runQueue() {
       CATS.forEach(function(c) {
         safeScores[c.key] = (result.scores && typeof result.scores[c.key] === 'number') ? result.scores[c.key] : 0;
       });
-      var frs = (typeof result.frs==='number'&&!isNaN(result.frs)) ? result.frs : CATS.reduce(function(a,c){return a+safeScores[c.key]*c.w;},0);
+      // Always recalculate FRS from scores using the formula — never trust the AI's frs field
+      // which can differ from the weighted sum of its own category scores
+      var frs = CATS.reduce(function(a,c){ return a + safeScores[c.key] * c.w; }, 0);
       // Use pre-computed word counts from file load, or compute now from full text
       var negCounts = item.negCounts || {};
       var posCounts = item.posCounts || {};
@@ -1131,7 +1133,8 @@ function paperColor(p) { return COLORS[p]||'#7F77DD'; }
 
 function showResult(r, pub, dt) {
   document.getElementById('spinArea').style.display = 'none';
-  var frs = (typeof r.frs==='number'&&!isNaN(r.frs))?r.frs:CATS.reduce(function(a,c){return a+(r.scores[c.key]||0)*c.w;},0);
+  // Always recalculate FRS from category scores for consistency
+  var frs = CATS.reduce(function(a,c){ return a + ((r.scores && typeof r.scores[c.key]==='number') ? r.scores[c.key] : 0) * c.w; }, 0);
   var col = paperColor(pub);
   document.getElementById('resPub').textContent = pub+' — '+formatDate(dt);
   document.getElementById('resFrs').textContent = frs.toFixed(2);
