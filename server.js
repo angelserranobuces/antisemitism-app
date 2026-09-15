@@ -1,12 +1,13 @@
-const http  = require('http');
-const https = require('https');
-const fs    = require('fs');
-const path  = require('path');
+const http   = require('http');
+const https  = require('https');
+const fs     = require('fs');
+const path   = require('path');
+const { Client } = require('pg');
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-const PORT = process.env.PORT || 3000;
-const MAX_BODY = 800 * 1024 * 1024;
-const DATA_FILE = path.join(__dirname, 'data.json');
+const DATABASE_URL      = process.env.DATABASE_URL || '';
+const PORT              = process.env.PORT || 3000;
+const MAX_BODY          = 800 * 1024 * 1024;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -15,27 +16,67 @@ const MIME = {
   '.ico':  'image/x-icon',
 };
 
-// ── Data persistence helpers ───────────────────────────────────────────────
-function loadData() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    }
-  } catch(e) { console.error('Error loading data:', e.message); }
-  return [];
+// ── DB helpers ─────────────────────────────────────────────────────────────
+async function getClient() {
+  const client = new Client({
+    connectionString: DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+  await client.connect();
+  return client;
 }
 
-function saveData(entries) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(entries), 'utf8');
-  } catch(e) { console.error('Error saving data:', e.message); }
+async function initDB() {
+  if (!DATABASE_URL) { console.log('No DATABASE_URL — skipping DB init'); return; }
+  const client = await getClient();
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS entries (
+      id TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await client.end();
+  console.log('Database ready');
 }
 
-// ── Static file server ─────────────────────────────────────────────────────
+async function dbGetAll() {
+  if (!DATABASE_URL) return [];
+  const client = await getClient();
+  const res = await client.query('SELECT data FROM entries ORDER BY created_at ASC');
+  await client.end();
+  return res.rows.map(function(r){ return r.data; });
+}
+
+async function dbUpsert(entry) {
+  if (!DATABASE_URL) return;
+  const client = await getClient();
+  await client.query(
+    'INSERT INTO entries (id, data) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET data = $2',
+    [String(entry.id), JSON.stringify(entry)]
+  );
+  await client.end();
+}
+
+async function dbDelete(id) {
+  if (!DATABASE_URL) return;
+  const client = await getClient();
+  await client.query('DELETE FROM entries WHERE id = $1', [String(id)]);
+  await client.end();
+}
+
+async function dbClear() {
+  if (!DATABASE_URL) return;
+  const client = await getClient();
+  await client.query('DELETE FROM entries');
+  await client.end();
+}
+
+// ── Static files ───────────────────────────────────────────────────────────
 function serveFile(res, filePath) {
   fs.readFile(filePath, function(err, data) {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
-    var ext = path.extname(filePath);
+    const ext = path.extname(filePath);
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'text/plain' });
     res.end(data);
   });
@@ -43,7 +84,7 @@ function serveFile(res, filePath) {
 
 // ── Body reader ────────────────────────────────────────────────────────────
 function readBody(req, res, cb) {
-  var chunks = [], size = 0;
+  const chunks = []; let size = 0;
   req.on('data', function(chunk) {
     size += chunk.length;
     if (size > MAX_BODY) {
@@ -59,16 +100,18 @@ function readBody(req, res, cb) {
   });
 }
 
+// ── JSON response ──────────────────────────────────────────────────────────
+function jsonRes(res, status, obj) {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+  res.end(JSON.stringify(obj));
+}
+
 // ── Anthropic proxy ────────────────────────────────────────────────────────
 function proxyToAnthropic(req, res) {
   readBody(req, res, function(bodyStr) {
     console.log('[API] Request size:', Math.round(bodyStr.length/1024), 'KB');
-    if (!ANTHROPIC_API_KEY) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: 'API key not configured on server.' } }));
-      return;
-    }
-    var options = {
+    if (!ANTHROPIC_API_KEY) { jsonRes(res, 500, { error: { message: 'API key not configured.' } }); return; }
+    const options = {
       hostname: 'api.anthropic.com',
       path: '/v1/messages',
       method: 'POST',
@@ -79,23 +122,18 @@ function proxyToAnthropic(req, res) {
         'Content-Length': Buffer.byteLength(bodyStr),
       }
     };
-    var apiReq = https.request(options, function(apiRes) {
-      var resp = [];
-      apiRes.on('data', function(c) { resp.push(c); });
+    const apiReq = https.request(options, function(apiRes) {
+      const resp = [];
+      apiRes.on('data', function(c){ resp.push(c); });
       apiRes.on('end', function() {
-        var body = Buffer.concat(resp).toString();
-        console.log('[API] Status:', apiRes.statusCode, '| Response length:', body.length);
-        res.writeHead(apiRes.statusCode, {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        });
+        const body = Buffer.concat(resp).toString();
+        console.log('[API] Status:', apiRes.statusCode);
+        res.writeHead(apiRes.statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(body);
       });
     });
     apiReq.on('error', function(err) {
-      console.error('[API] Error:', err.message);
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: 'Proxy error: ' + err.message } }));
+      jsonRes(res, 502, { error: { message: 'Proxy error: ' + err.message } });
     });
     apiReq.write(bodyStr);
     apiReq.end();
@@ -103,9 +141,7 @@ function proxyToAnthropic(req, res) {
 }
 
 // ── HTTP server ────────────────────────────────────────────────────────────
-http.createServer(function(req, res) {
-
-  // CORS preflight
+const server = http.createServer(function(req, res) {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
@@ -115,65 +151,63 @@ http.createServer(function(req, res) {
     res.end(); return;
   }
 
-  var url = req.url.split('?')[0];
+  const url = req.url.split('?')[0];
 
-  // ── GET /api/history — load all entries ──
+  // GET /api/history
   if (req.method === 'GET' && url === '/api/history') {
-    var data = loadData();
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-    res.end(JSON.stringify(data));
+    dbGetAll().then(function(data){ jsonRes(res, 200, data); })
+      .catch(function(e){ console.error('dbGetAll error:', e.message); jsonRes(res, 500, { error: { message: e.message } }); });
     return;
   }
 
-  // ── POST /api/history — save a new entry ──
+  // POST /api/history
   if (req.method === 'POST' && url === '/api/history') {
     readBody(req, res, function(bodyStr) {
       try {
-        var entry = JSON.parse(bodyStr);
-        var data = loadData();
-        // Avoid duplicates by id
-        data = data.filter(function(e) { return String(e.id) !== String(entry.id); });
-        data.push(entry);
-        saveData(data);
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify({ ok: true, count: data.length }));
-      } catch(e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: { message: 'Invalid JSON' } }));
-      }
+        const entry = JSON.parse(bodyStr);
+        dbUpsert(entry).then(function(){ jsonRes(res, 200, { ok: true }); })
+          .catch(function(e){ console.error('dbUpsert error:', e.message); jsonRes(res, 500, { error: { message: e.message } }); });
+      } catch(e) { jsonRes(res, 400, { error: { message: 'Invalid JSON' } }); }
     });
     return;
   }
 
-  // ── DELETE /api/history/:id — delete one entry ──
+  // DELETE /api/history/:id
   if (req.method === 'DELETE' && url.startsWith('/api/history/')) {
-    var id = url.replace('/api/history/', '');
-    var data = loadData().filter(function(e) { return String(e.id) !== id; });
-    saveData(data);
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-    res.end(JSON.stringify({ ok: true }));
+    const id = decodeURIComponent(url.replace('/api/history/', ''));
+    dbDelete(id).then(function(){ jsonRes(res, 200, { ok: true }); })
+      .catch(function(e){ jsonRes(res, 500, { error: { message: e.message } }); });
     return;
   }
 
-  // ── DELETE /api/history — clear all ──
+  // DELETE /api/history
   if (req.method === 'DELETE' && url === '/api/history') {
-    saveData([]);
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-    res.end(JSON.stringify({ ok: true }));
+    dbClear().then(function(){ jsonRes(res, 200, { ok: true }); })
+      .catch(function(e){ jsonRes(res, 500, { error: { message: e.message } }); });
     return;
   }
 
-  // ── POST /api/messages — Anthropic proxy ──
+  // POST /api/messages
   if (req.method === 'POST' && url === '/api/messages') {
     proxyToAnthropic(req, res); return;
   }
 
-  // ── Static files ──
-  var filePath = (url === '/' || url === '') ? '/index.html' : url;
+  // Static files
+  const filePath = (url === '/' || url === '') ? '/index.html' : url;
   serveFile(res, path.join(__dirname, filePath));
+});
 
-}).listen(PORT, function() {
-  console.log('Media Framing Risk Analyser running on port ' + PORT);
-  console.log('API key set: YES (length:', ANTHROPIC_API_KEY.length + ')');
-  console.log('Data file:', DATA_FILE);
+// ── Start ──────────────────────────────────────────────────────────────────
+initDB().then(function() {
+  server.listen(PORT, function() {
+    console.log('Media Framing Risk Analyser running on port ' + PORT);
+    console.log('Database:', DATABASE_URL ? 'PostgreSQL connected' : 'NOT configured');
+    console.log('API key:', ANTHROPIC_API_KEY ? 'set (length ' + ANTHROPIC_API_KEY.length + ')' : 'NOT set');
+  });
+}).catch(function(e) {
+  console.error('DB init failed:', e.message);
+  // Start anyway without DB
+  server.listen(PORT, function() {
+    console.log('Running WITHOUT database on port ' + PORT);
+  });
 });
