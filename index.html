@@ -286,11 +286,11 @@ tr:hover td { background:var(--surf2); }
 
   <!-- Intro -->
   <div class="intro">
-    <span class="pill">&#9679; IHRA-Informed Methodology</span>
+    <span class="pill">&#9679; ACOM Index v0.3 · IHRA-Informed</span>
     <h2>Assess antisemitic framing risk in newspaper editions</h2>
-    <p>Upload a newspaper PDF and this tool evaluates it across nine IHRA-informed indicators — from conspiracy tropes to contextual omission — producing a weighted Framing Risk Score from 0 to 5. Results are stored by newspaper and date so you can track framing trends over time.</p>
+    <p>Upload a newspaper PDF and this tool evaluates it across seven IHRA-informed pillars (v0.3 methodology) — producing a weighted Framing Risk Score from 0 to 5. Asymmetric Empathy and Contextual Omission are tracked as framing indicators but do not enter the FRS. Results are stored by newspaper and date so you can track framing trends over time.</p>
     <div class="features">
-      <div class="feat"><div class="feat-icon">&#9776;</div><p>9-category weighted scoring</p></div>
+      <div class="feat"><div class="feat-icon">&#9776;</div><p>7-pillar IHRA scoring + 2 framing indicators</p></div>
       <div class="feat"><div class="feat-icon">&#9680;</div><p>0–5 framing risk scale</p></div>
       <div class="feat"><div class="feat-icon">&#128200;</div><p>Historical trend chart</p></div>
       <div class="feat"><div class="feat-icon">&#9741;</div><p>Evidence summaries</p></div>
@@ -359,8 +359,9 @@ tr:hover td { background:var(--surf2); }
       <span class="rbadge" id="resBadge"></span>
       <p class="sc-conf" id="resConf"></p>
     </div>
+    <div id="resIncitement" style="display:none;background:#2B0A0A;border:1px solid #EF5350;border-radius:8px;padding:12px 16px;margin-bottom:12px;color:#EF5350;font-size:13px;line-height:1.5"></div>
     <div class="card">
-      <div class="clabel">Category breakdown</div>
+      <div class="clabel">Category breakdown <span style="font-size:11px;font-weight:400;color:var(--muted)">— * AE and CO are framing indicators only (not in FRS)</span></div>
       <div id="catRows"></div>
     </div>
     <div class="card">
@@ -431,7 +432,7 @@ tr:hover td { background:var(--surf2); }
 
   <!-- Tab 2: Pillar Contributions -->
   <div class="tab-panel" id="tab-pillars">
-    <p style="font-size:13px;color:var(--muted);margin-bottom:1.25rem">Rating contribution of each of the 9 IHRA pillars across all analysed editions, weighted by their FRS multiplier.</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:1.25rem">Rating contribution of each pillar across all analysed editions (v0.3). The 7 IHRA pillars are weighted in the FRS; Asymmetric Empathy (AE) and Contextual Omission (CO) are framing indicators shown separately — they do not enter the score.</p>
     <div class="card" style="margin-bottom:1rem">
       <div class="clabel">&#9638; Pillar Score Matrix — all editions</div>
       <div class="matrix-wrap">
@@ -567,16 +568,18 @@ checkAuth();
 // API key is held securely on the server
 var PAPERS = ['El Mundo','La Razón','ABC','El País'];
 var COLORS = { 'El Mundo':'#F5A623', 'La Razón':'#7ED321', 'ABC':'#E05252', 'El País':'#4A90D9' };
+// v0.3: AE and CO moved to framing index (w=0), weights renormalized across 7 IHRA pillars
+// IN (Incitement) is a threshold, not scored
 var CATS = [
-  {key:'CB', label:'Collective Blame',                    w:.20},
-  {key:'CT', label:'Conspiracy Tropes',                   w:.20},
-  {key:'HI', label:'Holocaust Inversion',                 w:.15},
-  {key:'D',  label:'Demonisation',                        w:.10},
-  {key:'DSD',label:'Denial of Self-Determination',        w:.10},
-  {key:'DS', label:'Double Standards',                    w:.10},
-  {key:'DH', label:'Dehumanisation',                      w:.05},
-  {key:'AE', label:'Asymmetric Empathy',                  w:.05},
-  {key:'CO', label:'Contextual Omission',                 w:.05},
+  {key:'CB', label:'Collective Blame',                    w:.222},
+  {key:'CT', label:'Conspiracy Tropes',                   w:.222},
+  {key:'HI', label:'Holocaust Denial / Inversion',        w:.167},
+  {key:'D',  label:'Demonisation',                        w:.111},
+  {key:'DSD',label:'Denial of Self-Determination',        w:.111},
+  {key:'DS', label:'Double Standards',                    w:.111},
+  {key:'DH', label:'Dehumanisation',                      w:.056},
+  {key:'AE', label:'Asymmetric Empathy (framing)',        w:0},
+  {key:'CO', label:'Contextual Omission (framing)',       w:0},
 ];
 var STORAGE_KEY = 'framing_risk_history_v2';
 var b64 = null;
@@ -595,6 +598,7 @@ function compressEntry(e) {
     scores:      e.scores,
     evidence:    e.evidence     ? e.evidence.slice(0, 500)     : '',
     main_drivers:e.main_drivers ? e.main_drivers.slice(0, 800) : '',
+    incitement:  e.incitement === true,
     notes:       e.notes || '',
     negCounts:   e.negCounts  || {},
     posCounts:   e.posCounts  || {},
@@ -939,41 +943,53 @@ function callAPIWithItem(item, sys, userText, maxTokens) {
 var SYS_PROMPT = (function() {
   var lines = [
     "You are an expert IHRA-trained media analyst specialising in antisemitic framing in Spanish-language press.",
-    "Apply the Framing Risk Score (FRS) methodology to the newspaper edition provided.",
+    "Apply the ACOM Index v0.3 methodology to the newspaper edition provided.",
     "",
-    "FRS = (CB*0.20)+(CT*0.20)+(HI*0.15)+(D*0.10)+(DSD*0.10)+(DS*0.10)+(DH*0.05)+(AE*0.05)+(CO*0.05)",
-    "All scores 0-5. FRS result is on the 0-5 scale.",
+    "METHODOLOGY v0.3 — IHRA INDEX (7 pillars, renormalized weights):",
+    "FRS = (CB*0.222)+(CT*0.222)+(HI*0.167)+(D*0.111)+(DSD*0.111)+(DS*0.111)+(DH*0.056)",
+    "AE and CO are framing indicators — score them (0-5) for evidence purposes but they do NOT enter the FRS calculation.",
+    "IN (Incitement to violence): if present in the outlet's own voice, flag as threshold=true and note it.",
+    "All scores 0-5.",
     "",
-    "CATEGORIES:",
-    "CB (20%) Collective Blame: Attributing Israeli state actions to all Jews globally. Holding diaspora Jews responsible for IDF decisions. Using 'los judios' as subject of Israeli state actions.",
-    "CT (20%) Conspiracy Tropes: Hidden Jewish/Israeli control narratives, dual loyalty accusations, 'el lobby judio controla Washington', 'la mano de Soros', framing Israeli influence as covert coordination.",
-    "HI (15%) Holocaust Inversion: Comparing Israel to Nazis. 'Israel hace lo mismo que los nazis', 'Holocausto palestino', Gaza as 'campo de concentracion', 'genocidio' equating Israeli policy with Nazi extermination, apartheid comparisons that invert victim/perpetrator.",
-    "D (10%) Demonisation: Framing Israel as uniquely evil beyond legitimate criticism. 'Estado terrorista israeli', 'franquicias terroristas', portraying Israel as having zero legitimate security concerns, moral exceptionalism applied only to Israel.",
-    "DSD (10%) Denial of Self-Determination: Framing Israel's existence as uniquely illegitimate. Treating Israel as a colonial project with no right to exist, calls to dismantle the Jewish state.",
-    "DS (10%) Double Standards: THIS IS THE MOST COMMON INDICATOR. Asymmetric scrutiny applied only to Israel — reporting Israeli operations in detail while ignoring Hamas/Hezbollah attacks; demanding Israeli justification never asked of other states in conflict; asymmetric headline framing that holds Israel to account while treating adversaries as passive.",
-    "DH (5%) Dehumanisation: Sub-human language for Israelis or Jews. Animal metaphors, pest/disease language applied to Jewish people or Israeli soldiers.",
-    "AE (5%) Asymmetric Empathy: THIS IS THE SECOND MOST COMMON INDICATOR. Naming and profiling Palestinian casualties while Israeli victims are absent or statistics; zero mention of Israeli hostages alongside Palestinian civilian reporting; no Israeli human perspective in conflict articles.",
-    "CO (5%) Contextual Omission: THIS IS THE THIRD MOST COMMON INDICATOR. Israeli strikes reported without mentioning rockets or attacks that prompted them; no October 7 reference in articles about Israeli operations; Hamas goals unmentioned; Israeli security measures presented as unprovoked.",
+    "SCORING UNIT — per-article severity:",
+    "Assess each article individually. For each pillar, severity is the maximum severity found in that article (0 if none).",
+    "Article weight multipliers (provisional): Editorial 1.0 · own column/cartoon 0.9 · news report 0.8 · external contributor 0.6 · letter 0.4.",
+    "Prominence: front page 1.0 · section opening 0.8 · inside page 0.6.",
+    "Only indicators in the outlet's own voice or with editorial endorsement count. Attributed quotes and decontextualised quotes do NOT enter the score.",
     "",
-    "ANCHORED SCORING SCALE CALIBRATED FOR SPANISH PRESS:",
-    "0 = PROHIBITED for DS, AE, CO when ANY Israel/Gaza/Hamas/Middle East content exists in the edition. Only valid for editions with zero relevant content across all pages.",
-    "1 = Minimal. One isolated instance. MINIMUM score for DS, AE, CO whenever any conflict coverage exists and full contextual balance is absent.",
-    "2 = EXPECTED BASELINE for DS, AE, CO in typical Spanish press coverage of the Israel-Gaza conflict. Spanish newspapers structurally present Palestinian casualties more prominently than Israeli ones and rarely include October 7 context in every article. Assign 2 as default and adjust.",
-    "3 = Moderate and consistent. The indicator recurs across multiple articles or defines the editorial stance of the edition. Expected for editions with prominent front-page Israel coverage, opinion columns using loaded language, or systematic one-sided framing across sections.",
-    "4 = Significant. A defining feature of the edition's identity — prominent repeated framing across news and opinion sections.",
-    "5 = Pervasive. Dominates the entire edition. Reserve for the most extreme cases only.",
+    "IHRA PILLARS (scored 0-5 per article, aggregated at edition level):",
+    "CB (22.2%) Collective Blame [A3, A11]: Attributing Israeli state actions to all Jews globally. Holding diaspora Jews responsible for IDF decisions. Using 'los judios' as subject of Israeli state actions.",
+    "CT (22.2%) Conspiracy Tropes [A2, A6]: Hidden Jewish/Israeli control narratives, dual loyalty accusations, 'el lobby judio controla Washington', 'la mano de Soros', framing Israeli influence as covert and coordinated.",
+    "HI (16.7%) Holocaust Denial/Distortion/Inversion [A4, A5, A10]: Comparing Israel to Nazis. 'Israel hace lo mismo que los nazis', 'Holocausto palestino', Gaza as 'campo de concentracion', 'genocidio' equating Israeli policy with Nazi extermination, apartheid comparisons that invert victim/perpetrator. Also: Holocaust denial or minimisation.",
+    "D (11.1%) Demonisation [A9]: Framing Israel as uniquely evil beyond legitimate criticism. 'Estado terrorista israeli', portraying Israel as having zero legitimate security concerns, moral exceptionalism applied only to Israel. NOTE: demonisation without tropes is a grey zone — apply conservatively.",
+    "DSD (11.1%) Denial of Jewish Self-Determination [A7]: Framing Israel's existence as uniquely illegitimate. Treating Israel as a colonial project with no right to exist, calls to dismantle the Jewish state.",
+    "DS (11.1%) Double Standards [A8] — OUTLET-LEVEL PATTERN: Asymmetric scrutiny applied only to Israel across the edition as a whole. Reporting Israeli operations in detail while ignoring Hamas/Hezbollah attacks; demanding Israeli justification never asked of other states in conflict; asymmetric headline framing. DS reflects a pattern across articles, not a single instance. Score 0 if no clear pattern; 1-2 if mild/moderate asymmetry; 3-4 if systematic; 5 if extreme and pervasive.",
+    "DH (5.6%) Dehumanisation [A2 with dehumanising language]: Sub-human language for Israelis or Jews. Animal metaphors, pest/disease language applied to Jewish people or Israeli soldiers.",
+    "",
+    "FRAMING INDICATORS (score but do not include in FRS — report separately):",
+    "AE Asymmetric Empathy [E1]: Naming and profiling Palestinian casualties while Israeli victims are absent or mere statistics; zero mention of Israeli hostages alongside Palestinian civilian reporting; no Israeli human perspective in conflict articles.",
+    "CO Contextual Omission [E2]: Israeli strikes reported without mentioning rockets or attacks that prompted them; no October 7 reference in articles about Israeli operations; Hamas goals unmentioned; Israeli security measures presented as unprovoked.",
+    "IN Incitement [A1 — threshold, not scored]: Any call to harm Jews or Israelis in the outlet's own voice. If present, set incitement=true in your response.",
+    "",
+    "SCORING SCALE:",
+    "0 = No evidence of this indicator in the edition.",
+    "1 = Minimal — one isolated instance. For DS, minimum 1 whenever any asymmetric coverage exists.",
+    "2 = Occasional/mild — a pattern begins to emerge. Expected baseline for DS, AE, CO in typical Spanish press conflict coverage.",
+    "3 = Moderate and consistent — indicator recurs across multiple articles or defines editorial stance.",
+    "4 = Significant — a defining feature of the edition's coverage.",
+    "5 = Pervasive — dominates the entire edition. Reserve for extreme cases only.",
     "",
     "MANDATORY RULES:",
-    "RULE 1 ZERO PROHIBITION: If the edition mentions Israel, Gaza, Hamas, or the Middle East conflict anywhere, a score of 0 for DS, AE, or CO is a scoring error. Minimum DS=1, AE=1, CO=1.",
-    "RULE 2 BASELINE RULE: For ANY edition mentioning Israel, Gaza, Hamas or the Middle East conflict, assign DS=2, AE=2, CO=2 as mandatory starting scores. These are NOT inflated — they reflect the structural reality of Spanish press coverage. Reduce each to 1 ONLY if that specific balancing element is explicitly present: DS reduces to 1 only if Hamas/Hezbollah actions are given equal column space to Israeli ones. AE reduces to 1 only if Israeli hostages or Israeli victims are named and humanised alongside Palestinian ones. CO reduces to 1 only if October 7 context appears in every article about Israeli military operations. Raise each to 3 if the opposite extreme is present — i.e. zero balancing content at all.",
-    "RULE 3 LANGUAGE TRIGGERS: These terms in the edition automatically trigger minimum score of 2 on indicated categories: 'genocidio' triggers HI and D; 'apartheid israeli' triggers HI and DSD; 'limpieza etnica' applied to Israel triggers D and HI; 'masacre' applied exclusively to Israeli actions triggers D and AE; 'bloqueo' without Hamas context triggers CO; 'bombardeos indiscriminados' applied to Israel triggers D.",
-    "RULE 4 OPINION COUNTS: Loaded language in opinion columns or editorials counts toward category scores even if news articles are more neutral.",
-    "RULE 5 NO ARTIFICIAL INFLATION: CB, CT, HI, DH, DSD require concrete textual evidence to score above 1. The anchored baseline applies specifically to DS, AE, CO.",
+    "RULE 1 CONSERVATIVE BIAS: When in doubt, score lower (grey zone = outside the score). CB, CT, HI, DH, DSD require concrete textual evidence in the outlet's own voice to score above 1.",
+    "RULE 2 DS OUTLET PATTERN: DS is assessed as an outlet-level pattern across the whole edition, not triggered by any single article. Score DS only when asymmetric scrutiny is a consistent editorial feature of the edition.",
+    "RULE 3 LANGUAGE TRIGGERS (minimum scores in outlet's own voice): 'genocidio' → HI≥2 and D≥2; 'apartheid israeli' → HI≥2 and DSD≥2; 'limpieza etnica' applied to Israel → D≥2 and HI≥2; 'Holocausto palestino' → HI≥3; 'campo de concentración' applied to Gaza → HI≥2.",
+    "RULE 4 OPINION COUNTS: Loaded language in editorials or opinion columns written by the outlet's own columnists counts toward category scores even if news articles are more neutral.",
+    "RULE 5 REPRODUCIBILITY: Every non-zero score must cite the specific headline, article title, or sentence that triggered it. Scores must be defensible with direct textual evidence.",
     "",
-    "Confidence: High=explicit repeated unambiguous evidence, Medium=clear pattern with some ambiguity, Low=single or ambiguous instance.",
+    "Confidence: High=explicit repeated unambiguous evidence in the outlet's own voice; Medium=clear pattern with some ambiguity; Low=single or ambiguous instance.",
     "",
     "Respond ONLY with a valid JSON object. No markdown fences, no preamble:",
-    '{"scores":{"CB":0,"CT":0,"HI":0,"D":0,"DSD":0,"DS":0,"DH":0,"AE":0,"CO":0},"frs":0.0,"confidence":"Medium","evidence":"3-5 sentences citing specific headlines, article titles and editorial choices.","main_drivers":"For each non-zero category explain what evidence triggered that score with direct references to the text."}'
+    '{"scores":{"CB":0,"CT":0,"HI":0,"D":0,"DSD":0,"DS":0,"DH":0,"AE":0,"CO":0},"incitement":false,"confidence":"Medium","evidence":"3-5 sentences citing specific headlines, article titles and editorial choices with direct textual references.","main_drivers":"For each non-zero IHRA category explain what evidence triggered that score, citing specific text. Note AE and CO as framing indicators separately."}'
   ];
   return lines.join("\n");
 })();
@@ -1097,6 +1113,7 @@ function runQueue() {
         evidence:    result.evidence || '',
         main_drivers:result.main_drivers || result.evidence || '',
         scores:      safeScores,
+        incitement:  result.incitement === true,
         notes:       '',
         negCounts:   negCounts,
         posCounts:   posCounts,
@@ -1142,13 +1159,26 @@ function showResult(r, pub, dt) {
   var bs = badgeStyle(frs);
   var badge = document.getElementById('resBadge');
   badge.textContent=bs.label; badge.style.background=bs.bg; badge.style.color=bs.color;
-  document.getElementById('resConf').textContent = 'Confidence: '+(r.confidence||'Medium');
+  var confEl = document.getElementById('resConf');
+  confEl.textContent = 'Confidence: '+(r.confidence||'Medium');
+  // Incitement threshold warning
+  var incEl = document.getElementById('resIncitement');
+  if (incEl) {
+    if (r.incitement) {
+      incEl.style.display = 'block';
+      incEl.innerHTML = '⚠️ <strong>Incitement threshold (A1) triggered</strong> — content calling for harm to Jews or Israelis detected in the outlet\'s own voice. Band cannot be better than D regardless of score.';
+    } else {
+      incEl.style.display = 'none';
+    }
+  }
   var rows = document.getElementById('catRows'); rows.innerHTML='';
   CATS.forEach(function(c){
     var s = (r.scores && typeof r.scores[c.key]==='number') ? r.scores[c.key] : 0;
     var pct=Math.round(s/5*100); var bcol=barColor(s);
     var row=document.createElement('div'); row.className='cat-row';
-    row.innerHTML='<span class="cat-nm">'+c.label+'</span><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+bcol+'"></div></div><span class="cat-sc" style="color:'+bcol+'">'+s.toFixed(1)+'</span>';
+    // Framing indicators (w=0) shown with different style
+    var framingNote = c.w === 0 ? ' <span style="font-size:10px;color:var(--muted);font-weight:400">[framing index]</span>' : '';
+    row.innerHTML='<span class="cat-nm">'+c.label+framingNote+'</span><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+(c.w===0?'#555':bcol)+'"></div></div><span class="cat-sc" style="color:'+(c.w===0?'#888':bcol)+'">'+s.toFixed(1)+(c.w===0?' *':'')+'</span>';
     rows.appendChild(row);
   });
   document.getElementById('resEvidence').textContent = r.evidence||'No evidence summary returned.';
@@ -1477,6 +1507,7 @@ function renderCards(h) {
       '<div class="np-card-frs" style="color:'+col+'">'+e.frs.toFixed(2)+'</div>'+
       '<div class="np-card-scale">out of 5</div>'+
       '<span class="np-card-badge" style="background:'+bs.bg+';color:'+bs.color+'">'+bs.label+'</span>'+
+      (e.incitement ? '<span class="np-card-badge" style="background:#2B0A0A;color:#EF5350;margin-left:4px">⚠ Incitement (A1)</span>' : '')+
       '<div class="np-card-ev">'+ev+'</div>';
     grid.appendChild(card);
   });
@@ -1673,11 +1704,11 @@ function clearAll() { clearAllServer(); }
 function downloadCSV() {
   var h=serverHistory;
   if(!h.length){ alert('No data to export.'); return; }
-  var rows=['Date,Newspaper,FRS,Risk Level,Confidence,CB,CT,HI,D,DSD,DS,DH,AE,CO'];
+  var rows=['Date,Newspaper,FRS,Risk Level,Confidence,CB,CT,HI,D,DSD,DS,DH,AE(framing),CO(framing),Incitement(threshold)'];
   h.forEach(function(e){
     var bs=badgeStyle(e.frs);
     var cats=CATS.map(function(c){ return e.scores&&typeof e.scores[c.key]==='number'?e.scores[c.key]:0; }).join(',');
-    rows.push([e.date,e.newspaper,e.frs,bs.label,e.confidence,cats].join(','));
+    rows.push([e.date,e.newspaper,e.frs,bs.label,e.confidence,cats,e.incitement?'YES':'NO'].join(','));
   });
   download('framing-risk-data.csv', rows.join('\n'), 'text/csv');
 }
